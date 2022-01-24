@@ -1,1 +1,0 @@
-/home/garrett/.vim/
