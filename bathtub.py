@@ -39,7 +39,7 @@ def closest_shelf(coord,polygons):
             closestpolygon = v
     return closestname, closestpolygon, min_dist
 
-def GLB_search(shelf,start,polygons,stepsize=10):
+def GLB_search(shelf,start,polygons,stepsize=1):
     depth = np.asarray(shelf.bed.values)
     ice = np.asarray(shelf.icemask_grounded_and_shelves.values)
 
@@ -62,67 +62,100 @@ def GLB_search(shelf,start,polygons,stepsize=10):
             for m in moves:
                 nextmove = [currentlocation[0]+m[0],currentlocation[1]+m[1]]
                 if 0 < nextmove[1] < len(shelf.x) and 0 < nextmove[0] < len(shelf.y)\
-                        and depth[nextmove[0],nextmove[1]]<=bath and nextmove not in alllocations:
+                        and depth[nextmove[0],nextmove[1]]<=bath\
+                        and nextmove not in alllocations and nextmove not in locations:
                     if ice[nextmove[0],nextmove[1]]!=0:
                         locations.append(nextmove)
                         alllocations.append(nextmove)
                         p = [shelf.x[nextmove[1]],shelf.y[nextmove[0]]]
-                        if np.isnan(ice[nextmove[0],nextmove[1]]) and cp.distance(Point(p))>10**6 and depth[nextmove[0],nextmove[1]] <bath:
-                            return True,bath-20, previouslocations#[[shelf.x[start[1]],shelf.y[start[0]]],[shelf.x[nextmove[1]],shelf.y[nextmove[0]]]]
-        print(".")
+                        if np.isnan(ice[nextmove[0],nextmove[1]]) and cp.distance(Point(p))>10**6:
+                            return True,bath-20, previouslocations
+        print(".",end="")
         if bath>0:
-            return False, 0, []
-        locations = alllocations
-        previouslocations = alllocations
+            return False, 1, previouslocations
+        locations = alllocations.copy()
+        previouslocations = alllocations.copy()
         alllocations = []
         bath = bath+20
 
-
-
-
-
-def highlight_margin(shelf,polygons):
+def get_grounding_line_points(shelf,polygons):
     margin_coords = []
     mx = []
     my = []
     icemask = np.asarray(shelf.icemask_grounded_and_shelves.values)
+    beddepth = np.asarray(shelf.bed.values)
     shelf_names = polygons.keys()
     margin_frac ={}
     lines = []
     count=0
     for l in shelf_names:
         margin_frac[l] = [0,0]
-    for i in tqdm(range(1,icemask.shape[0]-1)):
+
+    physical_cords = []
+    grid_indexes = []
+    depths=[]
+    for i in range(1,icemask.shape[0]-1):
         for j in  range(1,icemask.shape[1]-1):
-            if icemask[i][j] == 0:
+            if icemask[i][j] == 1:
                 a = icemask[i+1][j]
                 b = icemask[i-1][j]
                 c = icemask[i][j+1]
                 d = icemask[i][j-1]
-                if (np.asarray([a,b,c,d])==1).any():
-                    mx.append(shelf.x[j])
-                    my.append(shelf.y[i])
-                    #closestname, closestpolygon, _  = closest_shelf([shelf.x[j],shelf.y[i]],polygons)
-                    print("Beginning Search at {},{}".format(i,j))
-                    start = time.time()
-                    connected, boundingbath, locations = GLB_search(shelf,[j,i],polygons)
-                    end = time.time()
-                    print("It took: {}".format(end-start))
-                    print("*"*10)
-                    if len(locations)>0:
-                        plt.figure(figsize=(16, 14))
-                        ax = plt.subplot(111)
-                        pc = shelf.bed.plot.pcolormesh(
-                            ax=ax, cmap=cmocean.cm.topo, cbar_kwargs=dict(pad=0.01, aspect=30)
-                        )
-                        plt.scatter(shelf.x[j],shelf.y[i],c="red")
-                        locations = np.asarray(locations)
-                        #plt.scatter(locations.T[0],locations.T[1])
-                        pd = shelf.bed.plot.contour(
-                            ax=ax,levels=[boundingbath],c="red")
-                        plt.show()
+                if (np.asarray([a,b,c,d])==0).any():
+                    physical_cords.append([shelf.x[j],shelf.y[i]])
+                    grid_indexes.append([j,i])
+                    depths.append(beddepth[i,j])
+    return physical_cords, grid_indexes, depths
 
-    return mx,my
+def shelf_baths(shelf,polygons):
+    physical, grid,depths = get_grounding_line_points(shelf,polygons)
+    s = np.argsort(depths)
+    s=s[::-1]
+    physical,grid,depths = np.asarray(physical)[s],np.asarray(grid)[s],np.asarray(depths)[s]
+    baths = np.zeros(len(physical),dtype=float)
+    baths[:] =np.nan
+    bathtubs = 0
+    for i in tqdm(range(int(len(baths)/2)+3,len(baths))):
+        print(np.sum(np.isnan(baths)))
+        if bathtubs>10:
+            break
+        if np.isnan(baths[i]):
+            print("Beginning Search at {}".format(grid[i]),depths[i])
+            start = time.time()
+            connected, boundingbath, locations = GLB_search(shelf,grid[i],polygons)
+            print(boundingbath)
+            end = time.time()
+            print("It took: {}".format(end-start))
+            print("*"*10)
+            if len(locations)>0 and connected:
+                bathtubs+=1
+                print("ooh found a bathtub")
+
+                locations = np.asarray(locations)
+                plt.figure(figsize=(16, 14))
+                ax = plt.subplot(111)
+                pc = shelf.bed.plot.pcolormesh(
+                    ax=ax, cmap=cmocean.cm.topo, cbar_kwargs=dict(pad=0.01, aspect=30),vmin=-1000
+                )
+                pd = shelf.bed.plot.contour(
+                    ax=ax,levels=[boundingbath],c="red")
+                plt.scatter(shelf.x[locations.T[1]],shelf.y[locations.T[0]])
+                plt.scatter(physical[i][0],physical[i][1],c="red")
+                plt.scatter(physical[:,0]+10,physical[:,1]+10,c="green")
+                plt.show()
+
+                baths[i] = boundingbath
+                print(locations)
+                print(grid)
+                for l in locations:
+                    baths[np.all(grid==l,axis=1)]=boundingbath
+            elif not connected:
+                baths[i] = 1
+                for l in locations:
+                    baths[np.all(grid==l,axis=1)]=1           
+            else:
+                baths[i]=1
+    return physical,grid,baths
 
 def trimDataset(bm,xbounds,ybounds):
     shelf=bm
@@ -149,8 +182,6 @@ ybounds=[-1.4*(10**6), -0.2*(10**6)]
 shelf = trimDataset(bedmap,xbounds,ybounds)
 #shelf = bedmap
 
-# plt.figure(figsize=(16, 14))
-# ax = plt.subplot(111)
 # pc = shelf.bed.plot.pcolormesh(
 #     ax=ax, cmap=cmocean.cm.topo, cbar_kwargs=dict(pad=0.01, aspect=30)
 # )
@@ -159,14 +190,25 @@ shelf = trimDataset(bedmap,xbounds,ybounds)
 #     ax=ax,levels=[-494],c="red")
 # plt.show()
 
+def shelf_distance_test(shelf,polygons):
 
-print(np.nanmin(shelf.bed.values))
+    pc = shelf.icemask_grounded_and_shelves.plot.pcolormesh(
+    ax=ax, cmap=cmocean.cm.haline, cbar_kwargs=dict(pad=0.01, aspect=30)
+    )
+
+
+shelf_distance_test(shelf,polygons)
 #mc,mx,my,lines = highlight_margin(shelf,polygons)
-mx,my = highlight_margin(shelf,polygons)
-pc = shelf.icemask_grounded_and_shelves.plot.pcolormesh(
-  ax=ax, cmap=cmocean.cm.haline, cbar_kwargs=dict(pad=0.01, aspect=30)
-)
-plt.scatter(mx,my,c='red')
+
+# physical,grid,bs = shelf_baths(shelf,polygons)
+# physical = np.asarray(physical)
+# mx,my = physical.T[0],physical.T[1]
+# plt.figure(figsize=(16, 14))
+# ax = plt.subplot(111)
+# pc = shelf.icemask_grounded_and_shelves.plot.pcolormesh(
+#   ax=ax, cmap=cmocean.cm.haline, cbar_kwargs=dict(pad=0.01, aspect=30)
+# )
+# plt.scatter(mx,my,c=bs)
 # for l in lines:
 #     l = np.asarray(l).T
 #     plt.plot(l[0],l[1],c="orange",alpha=0.5)
