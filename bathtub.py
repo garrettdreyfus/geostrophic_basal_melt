@@ -95,7 +95,7 @@ def shelf_baths(shelf,polygons):
     s = np.argsort(depths)
     s=s[::-1]
     physical,grid,depths = np.asarray(physical)[s],np.asarray(grid)[s],np.asarray(depths)[s]
-    distance_mask = shelf_distance_mask(shelf,polygons)
+    distance_mask = shelf_distance_mask(shelf,"Ronne",polygons)
     baths = np.zeros(len(physical),dtype=float)
     baths[:] =np.nan
     bathtub_depths = []
@@ -126,51 +126,35 @@ def trimDataset(bm,xbounds,ybounds):
     shelf = shelf.where(shelf.y>ybounds[0],drop=True)
     return shelf
 
-def shelf_distance_mask(shelf,polygons):
-    mask = np.full_like(shelf.icemask_grounded_and_shelves.values,1,dtype=bool)
-    cn, cp, distance = closest_shelf([shelf.x[21],shelf.y[569]],polygons)
-    for x in range(len(shelf.x))[::10]:
-        for y in range(len(shelf.y))[::10]:
-            p = [shelf.x[x],shelf.y[y]]
-            if cp.exterior.distance(Point(p))>10**5:
-                mask[y,x]=0
+def shelf_distance_mask(ds,shelf,polygons):
+    mask = np.full_like(ds.icemask_grounded_and_shelves.values,1,dtype=bool)
+    minx,miny,maxx,maxy = polygons[shelf].bounds
+    print(minx,miny,maxx,maxy)
+    for x in range(len(ds.x))[::10]:
+        for y in range(len(ds.y))[::10]:
+            if minx-10**6 < ds.x[x] < maxx+10**6 and miny-10**6 < ds.y[y] < maxy+10**6:
+                p = [ds.x[x],ds.y[y]]
+                if polygons[shelf].exterior.distance(Point(p))>10**5:
+                    mask[y,x]=0
+                else:
+                    mask[y,x]=1
             else:
                 mask[y,x]=1
     return mask
 
-
-
-def shelf_distance_test(shelf,polygons):
-    plt.figure(figsize=(16, 14))
-    ax = plt.subplot(111)
-    pc = shelf.icemask_grounded_and_shelves.plot.pcolormesh(
-        ax=ax, cmap=cmocean.cm.haline, cbar_kwargs=dict(pad=0.01, aspect=30)
-    )
-    xs= []
-    ys= []
-    cn, cp, distance = closest_shelf([shelf.x[21],shelf.y[569]],polygons)
-    for x in shelf.x[::10]:
-        for y in shelf.y[::10]:
-            p = [x,y]
-            if cp.exterior.distance(Point(p))>10**5:
-                xs.append(x)
-                ys.append(y)
-    plt.scatter(xs,ys,c="red")
-    plt.show()
-
 bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
 #FRIS
 ##Default
-xbounds=  [ -1.6*(10**6),-0.75*(10**6)]
-ybounds= [-0.5*(10**6), 2.5*(10**6)]
+#xbounds=  [ -1.6*(10**6),-0.75*(10**6)]
+#ybounds= [-0.5*(10**6), 2.5*(10**6)]
 ##Closer in
 #xbounds=  [ -1.0*(10**6),-0.75*(10**6)]
 #ybounds= [-0.5*(10**6), 2.5*(10**6)]
 #xbounds=  [ -1.75*(10**6),-0*(10**6)]
 #ybounds= [-1.5*(10**6), 3.5*(10**6)]
 #PIG
-#xbounds=[ -2.4*(10**6),-1.4*(10**6)]
-#ybounds=[-1.4*(10**6), -0.2*(10**6)]
+xbounds=[ -2.4*(10**6),-1.4*(10**6)]
+ybounds=[-1.4*(10**6), -0.2*(10**6)]
 
 shelf = trimDataset(bedmap,xbounds,ybounds)
 
@@ -185,7 +169,9 @@ overallmap = np.full_like(bathtubs[0],0,dtype=float)
 for i in range(len(bathtubs)):
     overallmap[bathtubs[i]]=bathtub_depths[i]
 overallmap[overallmap==0]=np.nan
-plt.imshow(overallmap)
+plt.imshow(shelf.bed.values,cmap=cmocean.cm.topo)
+plt.colorbar()
+plt.imshow(overallmap,cmap="magma")
 plt.colorbar()
 plt.show()
 # physical = np.asarray(physical)
