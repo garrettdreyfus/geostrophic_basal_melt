@@ -102,7 +102,8 @@ def shelf_baths(shelf,polygons):
     bathtubs = []
     for i in tqdm(range(len(baths))):
         #print(np.sum(np.isnan(baths)))
-        if np.isnan(baths[i]):
+        cn, cp, distance = closest_shelf([physical[i][0],physical[i][1]],polygons)
+        if np.isnan(baths[i]) and cn == "Ronne":
             foundGLB, boundingbath, region_mask = GLB_search(shelf,grid[i],polygons,distance_mask)
             if foundGLB:
                 bathtubs.append(region_mask)
@@ -125,22 +126,6 @@ def trimDataset(bm,xbounds,ybounds):
     shelf = shelf.where(shelf.y>ybounds[0],drop=True)
     return shelf
 
-bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
-#FRIS
-##Default
-#xbounds=  [ -1.6*(10**6),-0.75*(10**6)]
-#ybounds= [-0.5*(10**6), 2.5*(10**6)]
-##Closer in
-#xbounds=  [ -1.0*(10**6),-0.75*(10**6)]
-#ybounds= [-0.5*(10**6), 2.5*(10**6)]
-#xbounds=  [ -1.75*(10**6),-0*(10**6)]
-#ybounds= [-1.5*(10**6), 3.5*(10**6)]
-#PIG
-xbounds=[ -2.4*(10**6),-1.4*(10**6)]
-ybounds=[-1.4*(10**6), -0.2*(10**6)]
-
-shelf = trimDataset(bedmap,xbounds,ybounds)
-
 def shelf_distance_mask(shelf,polygons):
     mask = np.full_like(shelf.icemask_grounded_and_shelves.values,1,dtype=bool)
     cn, cp, distance = closest_shelf([shelf.x[21],shelf.y[569]],polygons)
@@ -152,6 +137,7 @@ def shelf_distance_mask(shelf,polygons):
             else:
                 mask[y,x]=1
     return mask
+
 
 
 def shelf_distance_test(shelf,polygons):
@@ -172,6 +158,22 @@ def shelf_distance_test(shelf,polygons):
     plt.scatter(xs,ys,c="red")
     plt.show()
 
+bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
+#FRIS
+##Default
+xbounds=  [ -1.6*(10**6),-0.75*(10**6)]
+ybounds= [-0.5*(10**6), 2.5*(10**6)]
+##Closer in
+#xbounds=  [ -1.0*(10**6),-0.75*(10**6)]
+#ybounds= [-0.5*(10**6), 2.5*(10**6)]
+#xbounds=  [ -1.75*(10**6),-0*(10**6)]
+#ybounds= [-1.5*(10**6), 3.5*(10**6)]
+#PIG
+#xbounds=[ -2.4*(10**6),-1.4*(10**6)]
+#ybounds=[-1.4*(10**6), -0.2*(10**6)]
+
+shelf = trimDataset(bedmap,xbounds,ybounds)
+
 
 
 #shelf_distance_test(shelf,polygons)
@@ -179,9 +181,10 @@ def shelf_distance_test(shelf,polygons):
 
 physical,grid,baths, bathtubs,bathtub_depths = shelf_baths(shelf,polygons)
 print(bathtub_depths)
-overallmap = np.full_like(bathtubs[0],0,dtype=int)
+overallmap = np.full_like(bathtubs[0],0,dtype=float)
 for i in range(len(bathtubs)):
     overallmap[bathtubs[i]]=bathtub_depths[i]
+overallmap[overallmap==0]=np.nan
 plt.imshow(overallmap)
 plt.colorbar()
 plt.show()
