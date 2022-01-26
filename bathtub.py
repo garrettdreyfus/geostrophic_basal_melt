@@ -49,7 +49,7 @@ def GLB_search(shelf,start,polygons,distance_mask):
     startbath=bath
     #indices = np.indices(depth)
     while True:
-        below = depth<=bath
+        below = np.logical_and((depth<=bath),ice!=0)
         regions, _ = label(below)
         if bath>0:
             return False, bath, []
@@ -57,9 +57,9 @@ def GLB_search(shelf,start,polygons,distance_mask):
             if bath==startbath:
                 return False, bath, []
             else:
-                return True, bath-20,previouslocations
+                return True, bath-50,previouslocations
         previouslocations = (regions == regions[start[1],start[0]])
-        bath+=20
+        bath+=50
 
 def get_grounding_line_points(shelf,polygons):
     margin_coords = []
@@ -85,9 +85,14 @@ def get_grounding_line_points(shelf,polygons):
                 c = icemask[i][j+1]
                 d = icemask[i][j-1]
                 if (np.asarray([a,b,c,d])==0).any():
+                #if (np.isnan([a,b,c,d])).any():
                     physical_cords.append([shelf.x[j],shelf.y[i]])
                     grid_indexes.append([j,i])
                     depths.append(beddepth[i,j])
+    # plt.imshow(beddepth,vmin=-2000,vmax=2000)
+    # grid_indexes = np.asarray(grid_indexes).T
+    # plt.scatter(grid_indexes[0],grid_indexes[1])
+    # plt.show()
     return physical_cords, grid_indexes, depths
 
 def shelf_baths(shelf,polygons):
@@ -95,7 +100,7 @@ def shelf_baths(shelf,polygons):
     s = np.argsort(depths)
     s=s[::-1]
     physical,grid,depths = np.asarray(physical)[s],np.asarray(grid)[s],np.asarray(depths)[s]
-    distance_mask = shelf_distance_mask(shelf,"Ronne",polygons)
+    distance_mask = shelf_distance_mask(shelf,"Amery",polygons)
     baths = np.zeros(len(physical),dtype=float)
     baths[:] =np.nan
     bathtub_depths = []
@@ -103,7 +108,7 @@ def shelf_baths(shelf,polygons):
     for i in tqdm(range(len(baths))):
         #print(np.sum(np.isnan(baths)))
         cn, cp, distance = closest_shelf([physical[i][0],physical[i][1]],polygons)
-        if np.isnan(baths[i]) and cn == "Ronne":
+        if np.isnan(baths[i]) and cn == "Amery":
             foundGLB, boundingbath, region_mask = GLB_search(shelf,grid[i],polygons,distance_mask)
             if foundGLB:
                 bathtubs.append(region_mask)
@@ -127,49 +132,62 @@ def trimDataset(bm,xbounds,ybounds):
     return shelf
 
 def shelf_distance_mask(ds,shelf,polygons):
-    mask = np.full_like(ds.icemask_grounded_and_shelves.values,1,dtype=bool)
+    ice = ds.icemask_grounded_and_shelves.values
+    bed = ds.bed.values
+    plt.imshow(ice)
+    plt.show()
+    mask = np.full_like(ice,1,dtype=bool)
     minx,miny,maxx,maxy = polygons[shelf].bounds
     print(minx,miny,maxx,maxy)
     for x in range(len(ds.x))[::10]:
         for y in range(len(ds.y))[::10]:
-            if minx-10**6 < ds.x[x] < maxx+10**6 and miny-10**6 < ds.y[y] < maxy+10**6:
+            if ice[y,x] == 1:
+                    mask[y,x]=1
+            elif minx-2*10**6 < ds.x[x] < maxx+2*10**6 and miny-2*10**6 < ds.y[y] < maxy+2*10**6:
                 p = [ds.x[x],ds.y[y]]
-                if polygons[shelf].exterior.distance(Point(p))>10**5:
+                if polygons[shelf].exterior.distance(Point(p))>2*10**5 and bed[y,x]<-2000 and np.isnan(ice[y,x]):
                     mask[y,x]=0
                 else:
                     mask[y,x]=1
             else:
                 mask[y,x]=1
+    plt.imshow(mask)
+    plt.show()
     return mask
 
 bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
 #FRIS
 ##Default
-#xbounds=  [ -1.6*(10**6),-0.75*(10**6)]
-#ybounds= [-0.5*(10**6), 2.5*(10**6)]
+#xbounds=  [ -1.6*(10**6),-0.25*(10**6)]
+#ybounds= [-1*(10**6), 1.85*(10**6)]
 ##Closer in
 #xbounds=  [ -1.0*(10**6),-0.75*(10**6)]
 #ybounds= [-0.5*(10**6), 2.5*(10**6)]
 #xbounds=  [ -1.75*(10**6),-0*(10**6)]
 #ybounds= [-1.5*(10**6), 3.5*(10**6)]
 #PIG
-xbounds=[ -2.4*(10**6),-1.4*(10**6)]
-ybounds=[-1.4*(10**6), -0.2*(10**6)]
+#xbounds=[ -2.4*(10**6),-1.4*(10**6)]
+#ybounds=[-1.4*(10**6), -0.2*(10**6)]
+#ROSS
+#xbounds = [ -0.575*(10**6),0.375*(10**6)]
+#ybounds = [-2*(10**6), 0]
 
-shelf = trimDataset(bedmap,xbounds,ybounds)
-
+#shelf = trimDataset(bedmap,xbounds,ybounds)
+shelf=bedmap
 
 
 #shelf_distance_test(shelf,polygons)
 #mc,mx,my,lines = highlight_margin(shelf,polygons)
 
 physical,grid,baths, bathtubs,bathtub_depths = shelf_baths(shelf,polygons)
-print(bathtub_depths)
 overallmap = np.full_like(bathtubs[0],0,dtype=float)
-for i in range(len(bathtubs)):
+
+for i in range(len(bathtubs))[::-1]:
     overallmap[bathtubs[i]]=bathtub_depths[i]
 overallmap[overallmap==0]=np.nan
-plt.imshow(shelf.bed.values,cmap=cmocean.cm.topo)
+redactedbed = shelf.bed.values
+redactedbed[shelf.icemask_grounded_and_shelves==0]=np.nan
+plt.imshow(redactedbed,cmap=cmocean.cm.topo,vmin=-2000,vmax=2000)
 plt.colorbar()
 plt.imshow(overallmap,cmap="magma")
 plt.colorbar()
@@ -187,3 +205,4 @@ plt.show()
 #     plt.plot(l[0],l[1],c="orange",alpha=0.5)
 
 plt.show()
+
