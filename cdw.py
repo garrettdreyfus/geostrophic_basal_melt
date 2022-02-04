@@ -6,8 +6,9 @@ import numpy as np
 import itertools, pickle
 from tqdm import tqdm
 from shapely.geometry import Polygon, Point
-import time
-import xarray, pyproj
+import time,gsw,xarray, pyproj
+from bathtub import closest_shelf
+from scipy import interpolate
 
 
 with open("data/shelfpolygons.pickle","rb") as f:
@@ -64,17 +65,53 @@ def shelf_average_profile(shelf,sal,temp,d):
         else:
             average_s.append(np.nanmean(sal.s_an.values[0,i][mask]))
             average_t.append(np.nanmean(temp.t_an.values[0,i][mask]))
-    return mask, average_s, average_t
+    return mask, average_t, average_s,d
 
+shelf_profiles = {}
 for shelfname in polygons.keys():
     shelf = polygons[shelfname]
-    _,_, average_t = shelf_average_profile(shelf,sal,temp,d)
-    plt.plot(average_t,-d)
+    _,average_t, average_s,d = shelf_average_profile(shelf,sal,temp,d)
+    shelf_profiles[shelfname] = (average_t,average_s,d)
+
+shelf_profile_heat_functions = {}
+for k in shelf_profiles.keys():
+    t,s,d = shelf_profiles[k] 
+    shelf_profile_heat_functions[k] = interpolate.interp1d(d,(np.asarray(t)+273.15)*4184)
+
+with open("data/GLBsearchresults.pickle","rb") as f:
+    physical,grid,baths,bathtubs,bathtub_depths = pickle.load(f)
+
+def heat_content(heat_function,depth,plusminus):
+    #heat = gsw.cp_t_exact(s,t,d)
+    xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,max(d)))
+    #print(xnew,depth,max(d))
+    ynew = heat_function(xnew)
+    return np.trapz(ynew,xnew)
+
+shelf_heat_content = []
+bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
+bed = bedmap.bed.values
+
+for l in range(len(baths)):
+    baths[l]=bed[grid[l][1],grid[l][0]]
+    # if baths[l]>=0:
+    #     baths[l]=bed[grid[l][1],grid[l][0]]
+
+for l in tqdm(range(len(baths))):
+    coord = physical[l]
+    shelfname, _,_ = closest_shelf(coord,polygons)
+    shelf_heat_content.append(heat_content(shelf_profile_heat_functions[shelfname],-baths[l],20))
+
+
+# pc = bedmap.icemask_grounded_and_shelves.plot.pcolormesh(
+#   ax=ax, cmap=cmocean.cm.haline, cbar_kwargs=dict(pad=0.01, aspect=30)
+# )
+physical = np.asarray(physical).T
+plt.scatter(physical[0],physical[1],c=shelf_heat_content,vmin=4.4*10**7,vmax=4.5*10**7,cmap="jet")
+plt.colorbar()
+
 plt.show()
 
-#np.nan
-sal.s_an[0,0,:,:].values[mask]=0
-sal.s_an[0,0,:,:].plot.pcolormesh(
-    ax=ax, cmap="jet", cbar_kwargs=dict(pad=0.01, aspect=30),\
-    x="x",y="y")
-plt.show()
+
+
+

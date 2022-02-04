@@ -162,60 +162,61 @@ def shelf_distance_mask(ds,shelf,polygons):
     plt.show()
     return mask
 
-bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
-#FRIS
-##Default
-#xbounds=  [ -1.6*(10**6),-0.25*(10**6)]
-#ybounds= [-1*(10**6), 1.85*(10**6)]
-##Closer in
-#xbounds=  [ -1.0*(10**6),-0.75*(10**6)]
-#ybounds= [-0.5*(10**6), 2.5*(10**6)]
-#xbounds=  [ -1.75*(10**6),-0*(10**6)]
-#ybounds= [-1.5*(10**6), 3.5*(10**6)]
-#PIG
-xbounds=[ -2.4*(10**6),-1.4*(10**6)]
-ybounds=[-1.4*(10**6), -0.2*(10**6)]
-#ROSS
-#xbounds = [ -0.575*(10**6),0.375*(10**6)]
-#ybounds = [-2*(10**6), 0]
+if False:
+    bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
+    #FRIS
+    ##Default
+    #xbounds=  [ -1.6*(10**6),-0.25*(10**6)]
+    #ybounds= [-1*(10**6), 1.85*(10**6)]
+    ##Closer in
+    #xbounds=  [ -1.0*(10**6),-0.75*(10**6)]
+    #ybounds= [-0.5*(10**6), 2.5*(10**6)]
+    #xbounds=  [ -1.75*(10**6),-0*(10**6)]
+    #ybounds= [-1.5*(10**6), 3.5*(10**6)]
+    #PIG
+    xbounds=[ -2.4*(10**6),-1.4*(10**6)]
+    ybounds=[-1.4*(10**6), -0.2*(10**6)]
+    #ROSS
+    #xbounds = [ -0.575*(10**6),0.375*(10**6)]
+    #ybounds = [-2*(10**6), 0]
 
-#shelf = trimDataset(bedmap,xbounds,ybounds)
-shelf=bedmap
+    #shelf = trimDataset(bedmap,xbounds,ybounds)
+    shelf=bedmap
 
 
-#shelf_distance_test(shelf,polygons)
-#mc,mx,my,lines = highlight_margin(shelf,polygons)
+    #shelf_distance_test(shelf,polygons)
+    #mc,mx,my,lines = highlight_margin(shelf,polygons)
 
-physical,grid,baths, bathtubs,bathtub_depths = shelf_baths(shelf,polygons)
+    physical,grid,baths, bathtubs,bathtub_depths = shelf_baths(shelf,polygons)
 
-with open("data/GLBsearchresults.pickle","wb") as f:
-    pickle.dump([physical,grid,baths,bathtubs,bathtub_depths],f)
-with open("data/GLBsearchresults.pickle","rb") as f:
-    physical,grid,baths,bathtubs,bathtub_depths = pickle.load(f)
+    with open("data/GLBsearchresults.pickle","wb") as f:
+        pickle.dump([physical,grid,baths,bathtubs,bathtub_depths],f)
+    with open("data/GLBsearchresults.pickle","rb") as f:
+        physical,grid,baths,bathtubs,bathtub_depths = pickle.load(f)
 
-overallmap = np.full_like(shelf.bed.values,0,dtype=float)
+    overallmap = np.full_like(shelf.bed.values,0,dtype=float)
 
-for i in range(len(bathtubs))[::-1]:
-    overallmap[bathtubs[i]]=bathtub_depths[i]
-overallmap[overallmap==0]=np.nan
-redactedbed = shelf.bed.values
-redactedbed[shelf.icemask_grounded_and_shelves==0]=np.nan
-plt.imshow(redactedbed,cmap=cmocean.cm.topo,vmin=-2000,vmax=2000)
-plt.colorbar()
-plt.imshow(overallmap-redactedbed,cmap="magma")
-plt.colorbar()
-plt.show()
-# physical = np.asarray(physical)
-# mx,my = physical.T[0],physical.T[1]
-# plt.figure(figsize=(16, 14))
-# ax = plt.subplot(111)
-# pc = shelf.icemask_grounded_and_shelves.plot.pcolormesh(
-#   ax=ax, cmap=cmocean.cm.haline, cbar_kwargs=dict(pad=0.01, aspect=30)
-# )
-# plt.scatter(mx,my,c=bs)
-# for l in lines:
-#     l = np.asarray(l).T
-#     plt.plot(l[0],l[1],c="orange",alpha=0.5)
+    for i in range(len(bathtubs))[::-1]:
+        overallmap[bathtubs[i]]=bathtub_depths[i]
+    overallmap[overallmap==0]=np.nan
+    redactedbed = shelf.bed.values
+    redactedbed[shelf.icemask_grounded_and_shelves==0]=np.nan
+    plt.imshow(redactedbed,cmap=cmocean.cm.topo,vmin=-2000,vmax=2000)
+    plt.colorbar()
+    plt.imshow(overallmap-redactedbed,cmap="magma")
+    plt.colorbar()
+    plt.show()
+    # physical = np.asarray(physical)
+    # mx,my = physical.T[0],physical.T[1]
+    # plt.figure(figsize=(16, 14))
+    # ax = plt.subplot(111)
+    # pc = shelf.icemask_grounded_and_shelves.plot.pcolormesh(
+    #   ax=ax, cmap=cmocean.cm.haline, cbar_kwargs=dict(pad=0.01, aspect=30)
+    # )
+    # plt.scatter(mx,my,c=bs)
+    # for l in lines:
+    #     l = np.asarray(l).T
+    #     plt.plot(l[0],l[1],c="orange",alpha=0.5)
 
-plt.show()
+    plt.show()
 
