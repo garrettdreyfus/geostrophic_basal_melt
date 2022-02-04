@@ -4,29 +4,35 @@ import matplotlib.pyplot as plt
 import cmocean
 import numpy as np
 import itertools
+import pickle
 from tqdm import tqdm
 from shapely.geometry import Polygon, Point
 import time
 from scipy.ndimage import label 
 
 
-myshp = open("regions/IceBoundaries_Antarctica_v02.shp", "rb")
-mydbf = open("regions/IceBoundaries_Antarctica_v02.dbf", "rb")
-myshx = open("regions/IceBoundaries_Antarctica_v02.shx", "rb")
-r = shapefile.Reader(shp=myshp, dbf=mydbf, shx=myshx)
-s = r.shapes()
-records = r.shapeRecords()
-polygons =  {}
+def save_polygons():
+    myshp = open("regions/IceBoundaries_Antarctica_v02.shp", "rb")
+    mydbf = open("regions/IceBoundaries_Antarctica_v02.dbf", "rb")
+    myshx = open("regions/IceBoundaries_Antarctica_v02.shx", "rb")
+    r = shapefile.Reader(shp=myshp, dbf=mydbf, shx=myshx)
+    s = r.shapes()
+    records = r.shapeRecords()
+    polygons =  {}
+    for i in range(len(s)):
+        l = s[i]
+        name = records[i].record[0]
+        kind = records[i].record[3]
+        if l.shapeTypeName == 'POLYGON' and kind== "FL":
+            xs, ys = zip(*l.points)
+            polygons[name] = Polygon(l.points)
+            plt.annotate(name,(np.mean(xs),np.mean(ys)))
+    plt.savefig("search.png")
+    with open("data/shelfpolygons.pickle","wb") as f:
+        pickle.dump(polygons,f)
 
-for i in range(len(s)):
-    l = s[i]
-    name = records[i].record[0]
-    kind = records[i].record[3]
-    if l.shapeTypeName == 'POLYGON' and kind== "FL":
-        xs, ys = zip(*l.points)
-        polygons[name] = Polygon(l.points)
-        plt.annotate(name,(np.mean(xs),np.mean(ys)))
-plt.savefig("search.png")
+with open("data/shelfpolygons.pickle","rb") as f:
+    polygons = pickle.load(f)
 
 def closest_shelf(coord,polygons):
     min_dist = np.inf
@@ -100,18 +106,18 @@ def shelf_baths(shelf,polygons):
     s = np.argsort(depths)
     s=s[::-1]
     physical,grid,depths = np.asarray(physical)[s],np.asarray(grid)[s],np.asarray(depths)[s]
-    distance_mask = shelf_distance_mask(shelf,"Amery",polygons)
+    distance_mask = shelf_distance_mask(shelf,"Moscow_University",polygons)
     baths = np.zeros(len(physical),dtype=float)
     baths[:] =np.nan
     bathtub_depths = []
     bathtubs = []
     for i in tqdm(range(len(baths))):
         #print(np.sum(np.isnan(baths)))
-        cn, cp, distance = closest_shelf([physical[i][0],physical[i][1]],polygons)
-        if np.isnan(baths[i]) and cn == "Amery":
+        #cn, cp, distance = closest_shelf([physical[i][0],physical[i][1]],polygons)
+        if np.isnan(baths[i]):# and cn == "Pine_Island":
             foundGLB, boundingbath, region_mask = GLB_search(shelf,grid[i],polygons,distance_mask)
             if foundGLB:
-                bathtubs.append(region_mask)
+                bathtubs.append(np.where(region_mask==1))
                 bathtub_depths.append(boundingbath)
                 baths[i]=boundingbath
                 for l_i in range(len(grid)):
@@ -136,21 +142,22 @@ def shelf_distance_mask(ds,shelf,polygons):
     bed = ds.bed.values
     plt.imshow(ice)
     plt.show()
-    mask = np.full_like(ice,1,dtype=bool)
-    minx,miny,maxx,maxy = polygons[shelf].bounds
-    print(minx,miny,maxx,maxy)
-    for x in range(len(ds.x))[::10]:
-        for y in range(len(ds.y))[::10]:
-            if ice[y,x] == 1:
-                    mask[y,x]=1
-            elif minx-2*10**6 < ds.x[x] < maxx+2*10**6 and miny-2*10**6 < ds.y[y] < maxy+2*10**6:
-                p = [ds.x[x],ds.y[y]]
-                if polygons[shelf].exterior.distance(Point(p))>2*10**5 and bed[y,x]<-2000 and np.isnan(ice[y,x]):
-                    mask[y,x]=0
-                else:
-                    mask[y,x]=1
-            else:
-                mask[y,x]=1
+    #mask = np.full_like(ice,1,dtype=bool)
+    mask = ~np.logical_and(np.isnan(ice),bed<-3000)
+    # minx,miny,maxx,maxy = polygons[shelf].bounds
+    # print(minx,miny,maxx,maxy)
+    # for x in range(len(ds.x))[::10]:
+    #     for y in range(len(ds.y))[::10]:
+    #         if ice[y,x] == 1:
+    #                 mask[y,x]=1
+    #         elif minx-2*10**6 < ds.x[x] < maxx+2*10**6 and miny-2*10**6 < ds.y[y] < maxy+2*10**6:
+    #             p = [ds.x[x],ds.y[y]]
+    #             if polygons[shelf].exterior.distance(Point(p))>2*10**5 and bed[y,x]<-2000 and np.isnan(ice[y,x]):
+    #                 mask[y,x]=0
+    #             else:
+    #                 mask[y,x]=1
+    #         else:
+    #             mask[y,x]=1
     plt.imshow(mask)
     plt.show()
     return mask
@@ -166,8 +173,8 @@ bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounde
 #xbounds=  [ -1.75*(10**6),-0*(10**6)]
 #ybounds= [-1.5*(10**6), 3.5*(10**6)]
 #PIG
-#xbounds=[ -2.4*(10**6),-1.4*(10**6)]
-#ybounds=[-1.4*(10**6), -0.2*(10**6)]
+xbounds=[ -2.4*(10**6),-1.4*(10**6)]
+ybounds=[-1.4*(10**6), -0.2*(10**6)]
 #ROSS
 #xbounds = [ -0.575*(10**6),0.375*(10**6)]
 #ybounds = [-2*(10**6), 0]
@@ -180,7 +187,13 @@ shelf=bedmap
 #mc,mx,my,lines = highlight_margin(shelf,polygons)
 
 physical,grid,baths, bathtubs,bathtub_depths = shelf_baths(shelf,polygons)
-overallmap = np.full_like(bathtubs[0],0,dtype=float)
+
+with open("data/GLBsearchresults.pickle","wb") as f:
+    pickle.dump([physical,grid,baths,bathtubs,bathtub_depths],f)
+with open("data/GLBsearchresults.pickle","rb") as f:
+    physical,grid,baths,bathtubs,bathtub_depths = pickle.load(f)
+
+overallmap = np.full_like(shelf.bed.values,0,dtype=float)
 
 for i in range(len(bathtubs))[::-1]:
     overallmap[bathtubs[i]]=bathtub_depths[i]
@@ -189,7 +202,7 @@ redactedbed = shelf.bed.values
 redactedbed[shelf.icemask_grounded_and_shelves==0]=np.nan
 plt.imshow(redactedbed,cmap=cmocean.cm.topo,vmin=-2000,vmax=2000)
 plt.colorbar()
-plt.imshow(overallmap,cmap="magma")
+plt.imshow(overallmap-redactedbed,cmap="magma")
 plt.colorbar()
 plt.show()
 # physical = np.asarray(physical)
