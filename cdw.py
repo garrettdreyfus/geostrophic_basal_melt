@@ -9,6 +9,8 @@ from shapely.geometry import Polygon, Point
 import time,gsw,xarray, pyproj
 from bathtub import closest_shelf
 from scipy import interpolate
+import pandas as pd
+from copy import copy
 
 
 with open("data/shelfpolygons.pickle","rb") as f:
@@ -89,20 +91,60 @@ def heat_content(heat_function,depth,plusminus):
     return np.trapz(ynew,xnew)
 
 shelf_heat_content = []
+shelf_heat_content_byshelf={}
+for k in polygons.keys():
+    shelf_heat_content_byshelf[k] = []
 bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
 bed = bedmap.bed.values
 
-for l in range(len(baths)):
-    baths[l]=bed[grid[l][1],grid[l][0]]
-    # if baths[l]>=0:
-    #     baths[l]=bed[grid[l][1],grid[l][0]]
+# newbaths = copy(baths)
+# for l in range(len(baths)):
+#     baths[l]=bed[grid[l][1],grid[l][0]]
+#     #if baths[l]>=0:
+#         #baths[l]=bed[grid[l][1],grid[l][0]]
 
-for l in tqdm(range(len(baths))):
-    coord = physical[l]
-    shelfname, _,_ = closest_shelf(coord,polygons)
-    shelf_heat_content.append(heat_content(shelf_profile_heat_functions[shelfname],-baths[l],20))
+# for l in tqdm(range(len(baths))):
+#     coord = physical[l]
+#     shelfname, _,_ = closest_shelf(coord,polygons)
+#     shelf_heat_content.append(heat_content(shelf_profile_heat_functions[shelfname],-baths[l],5))
+#     shelf_heat_content_byshelf[shelfname].append(shelf_heat_content[-1])
 
+# with open("data/shc_noGLIB.pickle","wb") as f:
+#    pickle.dump(shelf_heat_content_byshelf,f)
 
+with open("data/shc_noGLIB.pickle","rb") as f:
+   shelf_heat_content_byshelf_noGLIB = pickle.load(f)
+
+with open("data/shc_GLIB.pickle","rb") as f:
+   shelf_heat_content_byshelf_GLIB = pickle.load(f)
+
+dfs = pd.read_excel("data/rignot2019.xlsx",sheet_name=None)
+dfs = dfs['Dataset_S1_PNAS_2018']
+print(dfs.keys())
+rignot_shelf_massloss={}
+for l in range(len(dfs["Glacier name"])):
+    if  dfs["Glacier name"][l] in shelf_heat_content_byshelf.keys():
+        rignot_shelf_massloss[dfs["Glacier name"][l]] = dfs["Cumul Balance"][l]
+
+fig,(ax1,ax2) = plt.subplots(1,2)
+shc= []
+smb = []
+c = []
+for k in rignot_shelf_massloss.keys():
+    if len(shelf_heat_content_byshelf_noGLIB[k]):
+        shc.append(np.log10(np.nanmedian(shelf_heat_content_byshelf_noGLIB[k])))
+        smb.append(rignot_shelf_massloss[k])
+        c.append(len(shelf_heat_content_byshelf_noGLIB[k]))
+        #ax1.text(shc,smb,k)
+ax1.scatter(shc,smb)
+
+for k in rignot_shelf_massloss.keys():
+    if len(shelf_heat_content_byshelf_noGLIB[k]):
+        shc = np.log10(np.nanmedian(shelf_heat_content_byshelf_GLIB[k]))
+        smb = rignot_shelf_massloss[k]
+        ax2.scatter(shc,smb)
+ 
+plt.show()
 # pc = bedmap.icemask_grounded_and_shelves.plot.pcolormesh(
 #   ax=ax, cmap=cmocean.cm.haline, cbar_kwargs=dict(pad=0.01, aspect=30)
 # )
