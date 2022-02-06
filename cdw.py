@@ -90,12 +90,12 @@ def heat_content(heat_function,depth,plusminus):
     ynew = heat_function(xnew)
     return np.trapz(ynew,xnew)
 
-shelf_heat_content = []
-shelf_heat_content_byshelf={}
-for k in polygons.keys():
-    shelf_heat_content_byshelf[k] = []
-bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
-bed = bedmap.bed.values
+# shelf_heat_content = []
+# shelf_heat_content_byshelf={}
+# for k in polygons.keys():
+#     shelf_heat_content_byshelf[k] = []
+# bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
+# bed = bedmap.bed.values
 
 # newbaths = copy(baths)
 # for l in range(len(baths)):
@@ -106,7 +106,7 @@ bed = bedmap.bed.values
 # for l in tqdm(range(len(baths))):
 #     coord = physical[l]
 #     shelfname, _,_ = closest_shelf(coord,polygons)
-#     shelf_heat_content.append(heat_content(shelf_profile_heat_functions[shelfname],-baths[l],5))
+#     shelf_heat_content.append(heat_content(shelf_profile_heat_functions[shelfname],-baths[l],50))
 #     shelf_heat_content_byshelf[shelfname].append(shelf_heat_content[-1])
 
 # with open("data/shc_noGLIB.pickle","wb") as f:
@@ -123,36 +123,67 @@ dfs = dfs['Dataset_S1_PNAS_2018']
 print(dfs.keys())
 rignot_shelf_massloss={}
 for l in range(len(dfs["Glacier name"])):
-    if  dfs["Glacier name"][l] in shelf_heat_content_byshelf.keys():
+    if  dfs["Glacier name"][l] in shelf_heat_content_byshelf_GLIB.keys():
         rignot_shelf_massloss[dfs["Glacier name"][l]] = dfs["Cumul Balance"][l]
+rignot_shelf_massloss["Filcher-Ronne"] = rignot_shelf_massloss["Filchner"]+rignot_shelf_massloss["Ronne"]
+shelf_heat_content_byshelf_GLIB["Filcher-Ronne"] = shelf_heat_content_byshelf_GLIB["Filchner"]+shelf_heat_content_byshelf_GLIB["Ronne"]
+shelf_heat_content_byshelf_noGLIB["Filcher-Ronne"] = shelf_heat_content_byshelf_noGLIB["Filchner"]+shelf_heat_content_byshelf_noGLIB["Ronne"]
+
+rignot_shelf_massloss["Crosson-Dotson"] = rignot_shelf_massloss["Crosson"]+rignot_shelf_massloss["Dotson"]
+shelf_heat_content_byshelf_GLIB["Crosson-Dotson"] = shelf_heat_content_byshelf_GLIB["Crosson"]+shelf_heat_content_byshelf_GLIB["Dotson"]
+shelf_heat_content_byshelf_noGLIB["Crosson-Dotson"] = shelf_heat_content_byshelf_noGLIB["Crosson"]+shelf_heat_content_byshelf_noGLIB["Dotson"]
+
+del rignot_shelf_massloss["Crosson"]
+del rignot_shelf_massloss["Dotson"]
+del shelf_heat_content_byshelf_noGLIB["Dotson"]
+del shelf_heat_content_byshelf_noGLIB["Crosson"]
+del shelf_heat_content_byshelf_GLIB["Crosson"]
+del shelf_heat_content_byshelf_GLIB["Dotson"]
+del rignot_shelf_massloss["LarsenB"]
+del rignot_shelf_massloss["George_VI"]
+del shelf_heat_content_byshelf_noGLIB["LarsenB"]
+del shelf_heat_content_byshelf_noGLIB["George_VI"]
+del shelf_heat_content_byshelf_GLIB["LarsenB"]
+del shelf_heat_content_byshelf_GLIB["George_VI"]
+
+del rignot_shelf_massloss["Filchner"]
+del rignot_shelf_massloss["Ronne"]
+del shelf_heat_content_byshelf_noGLIB["Filchner"]
+del shelf_heat_content_byshelf_noGLIB["Ronne"]
+del shelf_heat_content_byshelf_GLIB["Filchner"]
+del shelf_heat_content_byshelf_GLIB["Ronne"]
+
 
 fig,(ax1,ax2) = plt.subplots(1,2)
 shc= []
 smb = []
 c = []
 for k in rignot_shelf_massloss.keys():
-    if len(shelf_heat_content_byshelf_noGLIB[k]):
-        shc.append(np.log10(np.nanmedian(shelf_heat_content_byshelf_noGLIB[k])))
-        smb.append(rignot_shelf_massloss[k])
-        c.append(len(shelf_heat_content_byshelf_noGLIB[k]))
-        #ax1.text(shc,smb,k)
+    shc.append(np.log10(np.nanmedian(shelf_heat_content_byshelf_noGLIB[k])))
+    smb.append(rignot_shelf_massloss[k])
+    c.append(len(shelf_heat_content_byshelf_noGLIB[k]))
 ax1.scatter(shc,smb)
+ax1.set_xlabel("Median heat content +- 50 dbar of groundingline")
+ax1.set_ylabel("Mass Loss from Rignot 2019")
 
+shc= []
+smb = []
+c = []
 for k in rignot_shelf_massloss.keys():
-    if len(shelf_heat_content_byshelf_noGLIB[k]):
-        shc = np.log10(np.nanmedian(shelf_heat_content_byshelf_GLIB[k]))
-        smb = rignot_shelf_massloss[k]
-        ax2.scatter(shc,smb)
- 
+    shc.append(np.log10(np.nanmedian(shelf_heat_content_byshelf_GLIB[k])))
+    smb.append(rignot_shelf_massloss[k])
+    ax2.text(shc[-1],smb[-1],k)
+ax2.set_xlabel("Median heat content +- 50 dbar of max(groundingline,GLIB)")
+ax2.scatter(shc,smb)
 plt.show()
 # pc = bedmap.icemask_grounded_and_shelves.plot.pcolormesh(
 #   ax=ax, cmap=cmocean.cm.haline, cbar_kwargs=dict(pad=0.01, aspect=30)
 # )
-physical = np.asarray(physical).T
-plt.scatter(physical[0],physical[1],c=shelf_heat_content,vmin=4.4*10**7,vmax=4.5*10**7,cmap="jet")
-plt.colorbar()
+# physical = np.asarray(physical).T
+# plt.scatter(physical[0],physical[1],c=shelf_heat_content,vmin=4.4*10**7,vmax=4.5*10**7,cmap="jet")
+# plt.colorbar()
 
-plt.show()
+# plt.show()
 
 
 
