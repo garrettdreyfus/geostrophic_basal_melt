@@ -7,36 +7,12 @@ import itertools, pickle
 from tqdm import tqdm
 from shapely.geometry import Polygon, Point
 import time,gsw,xarray, pyproj
-from bathtub import closest_shelf
+from bathtub import closest_shelf,convert_bedmachine
 from scipy import interpolate
 import pandas as pd
 from copy import copy
+import xarray as xr
 
-
-with open("data/shelfpolygons.pickle","rb") as f:
-    polygons = pickle.load(f)
-
-sal = xarray.open_dataset("data/woa18_decav81B0_s00_04.nc",decode_times=False)
-temp = xarray.open_dataset("data/woa18_decav81B0_t00_04.nc",decode_times=False)
-sal = sal.where(sal.lat<-60,drop=True)
-temp= temp.where(sal.lat<-60,drop=True)
-
-plt.figure(figsize=(16, 14))
-ax = plt.subplot(111)
-sal['pycnocline']  = sal.s_an.copy()
-sal.pycnocline[:] = np.nan
-
-t_an = temp.t_an.values
-s_an = sal.s_an.values
-d = sal.depth.values
-lons=sal.lon.values
-lats=sal.lat.values
-
-projection = pyproj.Proj("epsg:3031")
-lons,lats = np.meshgrid(sal.lon,sal.lat)
-x,y = projection.transform(lons,lats)
-sal.coords["x"]= (("lat","lon"),x)
-sal.coords["y"]= (("lat","lon"),y)
 
 
 def create_depth_mask(da,d,limit):
@@ -46,10 +22,6 @@ def create_depth_mask(da,d,limit):
             if ~(np.isnan(da.values[0,:,i,j])).all():
                 depthmask[i,j] = (d[~np.isnan(da.values[0,:,i,j])][-1]>limit)
     return depthmask
-
-depthmask = create_depth_mask(sal.s_an,sal.depth.values,1000)
-
-sal.s_an[0,0,:,:].values[~depthmask]=np.nan
 
 def shelf_average_profile(shelf,sal,temp,d):
     centroid = list(shelf.centroid.coords)[0]
@@ -69,122 +41,93 @@ def shelf_average_profile(shelf,sal,temp,d):
             average_t.append(np.nanmean(temp.t_an.values[0,i][mask]))
     return mask, average_t, average_s,d
 
-shelf_profiles = {}
-for shelfname in polygons.keys():
-    shelf = polygons[shelfname]
-    _,average_t, average_s,d = shelf_average_profile(shelf,sal,temp,d)
-    shelf_profiles[shelfname] = (average_t,average_s,d)
+def generate_shelf_profiles(salfname,tempfname,polygons,shelf):
+    sal = xarray.open_dataset(salfname,decode_times=False)
+    temp = xarray.open_dataset(tempfname,decode_times=False)
+    sal = sal.where(sal.lat<-60,drop=True)
+    temp= temp.where(sal.lat<-60,drop=True)
+    t_an = temp.t_an.values
+    s_an = sal.s_an.values
+    d = sal.depth.values
+    lons=sal.lon.values
+    lats=sal.lat.values
+    projection = pyproj.Proj("epsg:3031")
+    lons,lats = np.meshgrid(sal.lon,sal.lat)
+    x,y = projection.transform(lons,lats)
+    sal.coords["x"]= (("lat","lon"),x)
+    sal.coords["y"]= (("lat","lon"),y)
+    depthmask = create_depth_mask(sal.s_an,sal.depth.values,1000)
+    sal.s_an[0,0,:,:].values[~depthmask]=np.nan
+    shelf_profiles = {}
+    for shelfname in polygons.keys():
+        shelf = polygons[shelfname]
+        _,average_t, average_s,d = shelf_average_profile(shelf,sal,temp,d)
+        shelf_profiles[shelfname] = (average_t,average_s,d)
 
-shelf_profile_heat_functions = {}
-for k in shelf_profiles.keys():
-    t,s,d = shelf_profiles[k] 
-    shelf_profile_heat_functions[k] = interpolate.interp1d(d,(np.asarray(t)+273.15)*4184)
+    shelf_profile_heat_functions = {}
+    for k in shelf_profiles.keys():
+        t,s,d = shelf_profiles[k] 
+        shelf_profile_heat_functions[k] = interpolate.interp1d(d,(np.asarray(t)+273.15)*4184)
 
-with open("data/GLBsearchresults.pickle","rb") as f:
-    physical,grid,baths,bathtubs,bathtub_depths = pickle.load(f)
+    return shelf_profiles, shelf_profile_heat_functions
+
+def ice_boundary_in_bathtub(bathtubs,icemask):
+    ice_boundary_points = []
+    mapmask = np.full_like(icemask,np.nan,dtype=float)
+    for bathtub in tqdm(bathtubs):
+        count = 0
+        for k in range(len(bathtub[0])):
+            i,j = bathtub[0][k],bathtub[1][k]
+            a = icemask[i+1][j]
+            b = icemask[i-1][j]
+            c = icemask[i][j+1]
+            d = icemask[i][j-1]
+            if np.isnan(icemask[i,j]) and (np.asarray([a,b,c,d])==1).any():
+                count+=1
+        ice_boundary_points.append(count)
+        mapmask[bathtub]=count
+    return ice_boundary_points
+
 
 def heat_content(heat_function,depth,plusminus):
     #heat = gsw.cp_t_exact(s,t,d)
-    xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,max(d)))
+    xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,5000))
     #print(xnew,depth,max(d))
     ynew = heat_function(xnew)
     return np.trapz(ynew,xnew)
 
-# shelf_heat_content = []
-# shelf_heat_content_byshelf={}
-# for k in polygons.keys():
-#     shelf_heat_content_byshelf[k] = []
-# bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
-# bed = bedmap.bed.values
+def heat_by_shelf(polygons,heat_functions,baths,bedvalues,grid,physical,withGLIB=True):
+    shelf_heat_content = []
+    shelf_heat_content_byshelf={}
+    shelf_ice_boundary_byshelf={}
+    for k in polygons.keys():
+        shelf_heat_content_byshelf[k] = []
+        shelf_ice_boundary_byshelf[k] = []
 
-# newbaths = copy(baths)
-# for l in range(len(baths)):
-#     baths[l]=bed[grid[l][1],grid[l][0]]
-#     #if baths[l]>=0:
-#         #baths[l]=bed[grid[l][1],grid[l][0]]
+    newbaths = copy(baths)
+    if withGLIB:
+        for l in range(len(baths)):
+            if baths[l]>=0:
+                baths[l]=bedvalues[grid[l][1],grid[l][0]]
+    else:
+        for l in range(len(baths)):
+            baths[l]=bedvalues[grid[l][1],grid[l][0]]
 
-# for l in tqdm(range(len(baths))):
-#     coord = physical[l]
-#     shelfname, _,_ = closest_shelf(coord,polygons)
-#     shelf_heat_content.append(heat_content(shelf_profile_heat_functions[shelfname],-baths[l],50))
-#     shelf_heat_content_byshelf[shelfname].append(shelf_heat_content[-1])
+    for l in tqdm(range(len(baths))):
+        if baths[l]<0:
+            coord = physical[l]
+            shelfname, _,_ = closest_shelf(coord,polygons)
+            shelf_heat_content.append(heat_content(heat_functions[shelfname],-baths[l],50))
+            shelf_heat_content_byshelf[shelfname].append(shelf_heat_content[-1])
+    return shelf_heat_content, shelf_heat_content_byshelf
 
-# with open("data/shc_noGLIB.pickle","wb") as f:
-#    pickle.dump(shelf_heat_content_byshelf,f)
-
-with open("data/shc_noGLIB.pickle","rb") as f:
-   shelf_heat_content_byshelf_noGLIB = pickle.load(f)
-
-with open("data/shc_GLIB.pickle","rb") as f:
-   shelf_heat_content_byshelf_GLIB = pickle.load(f)
-
-dfs = pd.read_excel("data/rignot2019.xlsx",sheet_name=None)
-dfs = dfs['Dataset_S1_PNAS_2018']
-print(dfs.keys())
-rignot_shelf_massloss={}
-for l in range(len(dfs["Glacier name"])):
-    if  dfs["Glacier name"][l] in shelf_heat_content_byshelf_GLIB.keys():
-        rignot_shelf_massloss[dfs["Glacier name"][l]] = dfs["Cumul Balance"][l]
-rignot_shelf_massloss["Filcher-Ronne"] = rignot_shelf_massloss["Filchner"]+rignot_shelf_massloss["Ronne"]
-shelf_heat_content_byshelf_GLIB["Filcher-Ronne"] = shelf_heat_content_byshelf_GLIB["Filchner"]+shelf_heat_content_byshelf_GLIB["Ronne"]
-shelf_heat_content_byshelf_noGLIB["Filcher-Ronne"] = shelf_heat_content_byshelf_noGLIB["Filchner"]+shelf_heat_content_byshelf_noGLIB["Ronne"]
-
-rignot_shelf_massloss["Crosson-Dotson"] = rignot_shelf_massloss["Crosson"]+rignot_shelf_massloss["Dotson"]
-shelf_heat_content_byshelf_GLIB["Crosson-Dotson"] = shelf_heat_content_byshelf_GLIB["Crosson"]+shelf_heat_content_byshelf_GLIB["Dotson"]
-shelf_heat_content_byshelf_noGLIB["Crosson-Dotson"] = shelf_heat_content_byshelf_noGLIB["Crosson"]+shelf_heat_content_byshelf_noGLIB["Dotson"]
-
-del rignot_shelf_massloss["Crosson"]
-del rignot_shelf_massloss["Dotson"]
-del shelf_heat_content_byshelf_noGLIB["Dotson"]
-del shelf_heat_content_byshelf_noGLIB["Crosson"]
-del shelf_heat_content_byshelf_GLIB["Crosson"]
-del shelf_heat_content_byshelf_GLIB["Dotson"]
-del rignot_shelf_massloss["LarsenB"]
-del rignot_shelf_massloss["George_VI"]
-del shelf_heat_content_byshelf_noGLIB["LarsenB"]
-del shelf_heat_content_byshelf_noGLIB["George_VI"]
-del shelf_heat_content_byshelf_GLIB["LarsenB"]
-del shelf_heat_content_byshelf_GLIB["George_VI"]
-
-del rignot_shelf_massloss["Filchner"]
-del rignot_shelf_massloss["Ronne"]
-del shelf_heat_content_byshelf_noGLIB["Filchner"]
-del shelf_heat_content_byshelf_noGLIB["Ronne"]
-del shelf_heat_content_byshelf_GLIB["Filchner"]
-del shelf_heat_content_byshelf_GLIB["Ronne"]
-
-
-fig,(ax1,ax2) = plt.subplots(1,2)
-shc= []
-smb = []
-c = []
-for k in rignot_shelf_massloss.keys():
-    shc.append(np.log10(np.nanmedian(shelf_heat_content_byshelf_noGLIB[k])))
-    smb.append(rignot_shelf_massloss[k])
-    c.append(len(shelf_heat_content_byshelf_noGLIB[k]))
-ax1.scatter(shc,smb)
-ax1.set_xlabel("Median heat content +- 50 dbar of groundingline")
-ax1.set_ylabel("Mass Loss from Rignot 2019")
-
-shc= []
-smb = []
-c = []
-for k in rignot_shelf_massloss.keys():
-    shc.append(np.log10(np.nanmedian(shelf_heat_content_byshelf_GLIB[k])))
-    smb.append(rignot_shelf_massloss[k])
-    ax2.text(shc[-1],smb[-1],k)
-ax2.set_xlabel("Median heat content +- 50 dbar of max(groundingline,GLIB)")
-ax2.scatter(shc,smb)
-plt.show()
-# pc = bedmap.icemask_grounded_and_shelves.plot.pcolormesh(
-#   ax=ax, cmap=cmocean.cm.haline, cbar_kwargs=dict(pad=0.01, aspect=30)
-# )
-# physical = np.asarray(physical).T
-# plt.scatter(physical[0],physical[1],c=shelf_heat_content,vmin=4.4*10**7,vmax=4.5*10**7,cmap="jet")
-# plt.colorbar()
-
-# plt.show()
-
-
-
+def extract_rignot_massloss(fname):
+    dfs = pd.read_excel(fname,sheet_name=None)
+    dfs = dfs['Dataset_S1_PNAS_2018']
+    print(dfs.keys())
+    rignot_shelf_massloss={}
+    for l in range(len(dfs["Glacier name"])):
+        if  dfs["Glacier name"][l]:
+            rignot_shelf_massloss[dfs["Glacier name"][l]] = dfs["Cumul Balance"][l]
+    return rignot_shelf_massloss
 
