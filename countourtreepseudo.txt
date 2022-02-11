@@ -1,0 +1,20 @@
+;; This buffer is for text that is not saved, and for Lisp evaluation.
+;; To create a file, visit it with C-x C-f and enter text in its buffer.
+first probably set everything offshore to flat 2000 m so its all one node
+
+dictionary of regions to point
+
+slice at deepest level
+
+slice again
+unique identifier = 0
+1 dictionary = {regions:{depths,depthslice}}
+2 dictionary = {regions:{child regions}}
+by region:
+    if every point in region was previously in one region, or not in any region, just add depth slice of points in that region
+    if every point in region was not previously in one region, connect those two regions to this new one and add depth slice of points to that region
+       also add all descendents to list of descendents
+
+generate dictionary {region:deepestdepth}
+
+take a point, find all regions its a part of that also have open ocean as decendent, take maximum depth of one

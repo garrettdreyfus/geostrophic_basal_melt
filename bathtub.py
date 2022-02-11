@@ -1,4 +1,5 @@
 import shapefile
+import sys
 import rockhound as rh
 import matplotlib.pyplot as plt
 import cmocean
@@ -68,6 +69,75 @@ def GLB_search(shelf,start,polygons,distance_mask):
         previouslocations = (regions == regions[start[1],start[0]])
         bath+=20
 
+def GLB_search_bulk(shelf,gl_points,polygons,distance_mask):
+    depth = np.asarray(shelf.bed.values)
+    ice = np.asarray(shelf.icemask_grounded_and_shelves.values)
+    #the whole ordering thing confused me so I'm reversing
+    baths = np.empty(gl_points.shape[0])
+    baths[:] = np.nan
+    bath= np.nanmin(depth[np.flip(gl_points,1)])
+    bathtubs = [[]] *len(baths)
+    #indices = np.indices(depth)
+    previous_label = []
+    old_count = 0
+    while np.sum(np.isnan(baths))>0:
+        print(bath,np.sum(np.isnan(baths)),end="\r")
+        sys.stdout.flush()
+        below = np.logical_and((depth<=bath),ice!=0)
+        regions, _ = label(below)
+        if bath>0:
+            baths[np.isnan(baths)]=1
+        for i in range(len(gl_points)):
+            if np.isnan(baths[i]):
+                coord = gl_points[i]
+                if bath>depth[coord[1],coord[0]]:
+                    if (regions[coord[1],coord[0]] == regions[~distance_mask]).any():
+                        baths[i] = bath
+                        if len(previous_label)>0:
+                            bathtubs[i] = (previous_label == previous_label[coord[1],coord[0]])
+                        else:
+                            bathtubs[i] = []
+                
+        previous_label = regions
+        bath+=20
+    return baths, bathtubs
+
+def GLB_search_bulk(shelf,gl_points,polygons,distance_mask):
+    depth = np.asarray(shelf.bed.values)
+    ice = np.asarray(shelf.icemask_grounded_and_shelves.values)
+    #the whole ordering thing confused me so I'm reversing
+    baths = np.empty(gl_points.shape[0])
+    baths[:] = np.nan
+    bath= np.nanmin(depth[np.flip(gl_points,1)])
+    bathtubs = [[]] *len(baths)
+    #indices = np.indices(depth)
+    previous_label = []
+    old_count = 0
+    while np.sum(np.isnan(baths))>0:
+        print(bath,np.sum(np.isnan(baths)),end="\r")
+        sys.stdout.flush()
+        below = np.logical_and((depth<=bath),ice!=0)
+        regions, _ = label(below)
+        if bath>0:
+            baths[np.isnan(baths)]=1
+        for i in range(len(gl_points)):
+            if np.isnan(baths[i]):
+                coord = gl_points[i]
+                if bath>depth[coord[1],coord[0]]:
+                    if (regions[coord[1],coord[0]] == regions[~distance_mask]).any():
+                        baths[i] = bath
+                        if len(previous_label)>0:
+                            bathtubs[i] = (previous_label == previous_label[coord[1],coord[0]])
+                        else:
+                            bathtubs[i] = []
+                
+        previous_label = regions
+        bath+=20
+    return baths, bathtubs
+
+
+
+
 def get_grounding_line_points(shelf,polygons):
     margin_coords = []
     mx = []
@@ -112,23 +182,23 @@ def shelf_baths(shelf,polygons):
     baths[:] =np.nan
     bathtub_depths = []
     bathtubs = []
-    for i in tqdm(range(len(baths))):
+    #for i in tqdm(range(len(baths))):
         #print(np.sum(np.isnan(baths)))
         #cn, cp, distance = closest_shelf([physical[i][0],physical[i][1]],polygons)
-        if np.isnan(baths[i]):# and cn == "Pine_Island":
-            foundGLB, boundingbath, region_mask = GLB_search(shelf,grid[i],polygons,distance_mask)
-            if foundGLB:
-                bathtubs.append(np.where(region_mask==1))
-                bathtub_depths.append(boundingbath)
-                baths[i]=boundingbath
-                for l_i in range(len(grid)):
-                    l = grid[l_i]
-                    if region_mask[l[1],l[0]]:
-                        baths[l_i]=boundingbath
-            else:
-                baths[i]=1
-                
-    return physical,grid,baths,bathtubs, bathtub_depths
+        #if np.isnan(baths[i]):# and cn == "Pine_Island":
+            #foundGLB, boundingbath, region_mask = GLB_search(shelf,grid[i],polygons,distance_mask)
+            # if foundGLB:
+            #     bathtubs.append(np.where(region_mask==1))
+            #     bathtub_depths.append(boundingbath)
+            #     baths[i]=boundingbath
+            #     for l_i in range(len(grid)):
+            #         l = grid[l_i]
+            #         if region_mask[l[1],l[0]]:
+            #             baths[l_i]=boundingbath
+            #else:
+                #baths[i]=1
+    baths, bathtubs = GLB_search_bulk(shelf,grid,polygons,distance_mask)
+    return physical,grid,baths,bathtubs, baths
 
 def trimDataset(bm,xbounds,ybounds):
     shelf=bm
@@ -141,26 +211,8 @@ def trimDataset(bm,xbounds,ybounds):
 def shelf_distance_mask(ds,shelf,polygons):
     ice = ds.icemask_grounded_and_shelves.values
     bed = ds.bed.values
-    plt.imshow(ice)
-    plt.show()
     #mask = np.full_like(ice,1,dtype=bool)
     mask = ~np.logical_and(np.isnan(ice),bed<-3000)
-    # minx,miny,maxx,maxy = polygons[shelf].bounds
-    # print(minx,miny,maxx,maxy)
-    # for x in range(len(ds.x))[::10]:
-    #     for y in range(len(ds.y))[::10]:
-    #         if ice[y,x] == 1:
-    #                 mask[y,x]=1
-    #         elif minx-2*10**6 < ds.x[x] < maxx+2*10**6 and miny-2*10**6 < ds.y[y] < maxy+2*10**6:
-    #             p = [ds.x[x],ds.y[y]]
-    #             if polygons[shelf].exterior.distance(Point(p))>2*10**5 and bed[y,x]<-2000 and np.isnan(ice[y,x]):
-    #                 mask[y,x]=0
-    #             else:
-    #                 mask[y,x]=1
-    #         else:
-    #             mask[y,x]=1
-    plt.imshow(mask)
-    plt.show()
     return mask
 
 def convert_bedmachine(fname,coarsenfact=2):
@@ -180,12 +232,12 @@ def convert_bedmachine(fname,coarsenfact=2):
 def find_and_save_bathtubs(dataset,outfname):
     if dataset == "bedmach":
         shelf = convert_bedmachine("data/BedMachine.nc")
-    elif datset == "bedmap":
+    elif dataset == "bedmap":
         shelf = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
-
     physical,grid,baths, bathtubs,bathtub_depths = shelf_baths(shelf,polygons)
     with open(outfname,"wb") as f:
         pickle.dump([physical,grid,baths,bathtubs,bathtub_depths],f)
+    return physical,grid,baths,bathtubs,bathtub_depths
 
 ##Default
 #xbounds=  [ -1.6*(10**6),-0.25*(10**6)]

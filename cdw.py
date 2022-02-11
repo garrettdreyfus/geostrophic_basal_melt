@@ -1,7 +1,10 @@
 import shapefile
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 import rockhound as rh
 import matplotlib.pyplot as plt
 import cmocean
+from xgrads import open_CtlDataset
 import numpy as np
 import itertools, pickle
 from tqdm import tqdm
@@ -90,7 +93,6 @@ def ice_boundary_in_bathtub(bathtubs,icemask):
         mapmask[bathtub]=count
     return ice_boundary_points
 
-
 def heat_content(heat_function,depth,plusminus):
     #heat = gsw.cp_t_exact(s,t,d)
     xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,5000))
@@ -120,6 +122,8 @@ def heat_by_shelf(polygons,heat_functions,baths,bedvalues,grid,physical,withGLIB
             shelfname, _,_ = closest_shelf(coord,polygons)
             shelf_heat_content.append(heat_content(heat_functions[shelfname],-baths[l],50))
             shelf_heat_content_byshelf[shelfname].append(shelf_heat_content[-1])
+        else:
+            shelf_heat_content.append(np.nan)
     return shelf_heat_content, shelf_heat_content_byshelf
 
 def extract_rignot_massloss(fname):
@@ -127,8 +131,32 @@ def extract_rignot_massloss(fname):
     dfs = dfs['Dataset_S1_PNAS_2018']
     print(dfs.keys())
     rignot_shelf_massloss={}
+    rignot_shelf_areas = {}
     for l in range(len(dfs["Glacier name"])):
         if  dfs["Glacier name"][l]:
             rignot_shelf_massloss[dfs["Glacier name"][l]] = dfs["Cumul Balance"][l]
-    return rignot_shelf_massloss
+            rignot_shelf_areas[dfs["Glacier name"][l]] = dfs["Basin.1"][l]
+    return rignot_shelf_massloss, rignot_shelf_areas
+
+
+llset = open_CtlDataset('data/polynall.ctl')
+projection = pyproj.Proj("epsg:3031")
+lons,lats = np.meshgrid(llset.lon,llset.lat)
+x,y = projection.transform(lons,lats)
+llset.pr.values[0,:,:][llset.pr.values[0,:,:]==0] = np.nan
+llset.coords["x"]= (("lat","lon"),x)
+llset.coords["y"]= (("lat","lon"),y)
+bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
+# xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
+# projection = pyproj.Proj("epsg:4326")
+# print("transform")
+# xvals,yvals = projection.transform(xvals,yvals)
+# polyna = np.full_like(bedmap.bed.values,np.nan)
+# print("interp")
+# from scipy.interpolate import griddata
+# xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
+# polyna = griddata(np.asarray([llset.x.values.flatten(),llset.y.values.flatten()]).T,llset.pr.values.flatten(),(xvals,yvals))
+# with open("data/polynainterp.pickle","wb") as f:
+#     pickle.dump(polyna,f)
+
 
