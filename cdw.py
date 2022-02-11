@@ -32,11 +32,14 @@ def shelf_average_profile(shelf,sal,temp,d):
     mask[dist>radius] = False
     average_s = []
     average_t = []
+    [LAT,LON] = np.meshgrid(sal.lon,sal.lat)
     for i in range(len(d)):
         if np.sum(~np.isnan(sal.s_an.values[0,i][mask])) < 10:
             average_s.append(np.nan)
             average_t.append(np.nan)
         else:
+            s = gsw.SA_from_SP(sal.s_an.values[0,i][mask],d[i],LON[mask],LAT[mask])
+            t = gsw.CT_from_t(s,temp.t_an.values[0,i][mask],d[i])
             average_s.append(np.nanmean(sal.s_an.values[0,i][mask]))
             average_t.append(np.nanmean(temp.t_an.values[0,i][mask]))
     return mask, average_t, average_s,d
@@ -57,7 +60,6 @@ def generate_shelf_profiles(salfname,tempfname,polygons,shelf):
     sal.coords["x"]= (("lat","lon"),x)
     sal.coords["y"]= (("lat","lon"),y)
     depthmask = create_depth_mask(sal.s_an,sal.depth.values,1000)
-    sal.s_an[0,0,:,:].values[~depthmask]=np.nan
     shelf_profiles = {}
     for shelfname in polygons.keys():
         shelf = polygons[shelfname]
@@ -67,7 +69,7 @@ def generate_shelf_profiles(salfname,tempfname,polygons,shelf):
     shelf_profile_heat_functions = {}
     for k in shelf_profiles.keys():
         t,s,d = shelf_profiles[k] 
-        shelf_profile_heat_functions[k] = interpolate.interp1d(d,(np.asarray(t)+273.15)*4184)
+        shelf_profile_heat_functions[k] = interpolate.interp1d(d,np.asarray(t))
 
     return shelf_profiles, shelf_profile_heat_functions
 
@@ -94,7 +96,7 @@ def heat_content(heat_function,depth,plusminus):
     xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,5000))
     #print(xnew,depth,max(d))
     ynew = heat_function(xnew)
-    return np.trapz(ynew,xnew)
+    return np.trapz(ynew,xnew)-np.ptp(xnew)*gsw.CT_freezing(34.5,depth,0)
 
 def heat_by_shelf(polygons,heat_functions,baths,bedvalues,grid,physical,withGLIB=True):
     shelf_heat_content = []
@@ -104,7 +106,6 @@ def heat_by_shelf(polygons,heat_functions,baths,bedvalues,grid,physical,withGLIB
         shelf_heat_content_byshelf[k] = []
         shelf_ice_boundary_byshelf[k] = []
 
-    newbaths = copy(baths)
     if withGLIB:
         for l in range(len(baths)):
             if baths[l]>=0:
