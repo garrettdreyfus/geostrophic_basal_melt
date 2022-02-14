@@ -154,7 +154,8 @@ def get_grounding_line_points(shelf,polygons):
     physical_cords = []
     grid_indexes = []
     depths=[]
-    for i in range(1,icemask.shape[0]-1):
+    print("Grabbing grounding line points")
+    for i in tqdm(range(1,icemask.shape[0]-1)):
         for j in  range(1,icemask.shape[1]-1):
             if icemask[i][j] == 1:
                 a = icemask[i+1][j]
