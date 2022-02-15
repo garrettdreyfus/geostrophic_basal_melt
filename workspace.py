@@ -7,24 +7,7 @@ with open("data/shelfpolygons.pickle","rb") as f:
 
 with open("data/GLBsearchresults.pickle","rb") as f:
     physical,grid,baths,bathtubs,bathtub_depths = pickle.load(f)
-# physical,grid,baths,bathtubs,bathtub_depths = find_and_save_bathtubs("bedmap","data/bulkGLBcalc.pickle")
-# for b in bathtubs:
-#     plt.imshow(b)
-# plt.show()
-# region_counts= []
-# for p in range(-2000,2000,20):
-#     below = bedvalues<p
-#     regions, c = label(below)
-# plt.scatter(range(-2000,2000,100),region_counts)
-# plt.show()
 
-# bedvalues = np.zeros((10,10))
-# bedvalues[:]=0
-# for i in range(bedvalues.shape[0]):
-#     for j in range(bedvalues.shape[1]):
-#         bedvalues[i,j] = np.abs(j-bedvalues.shape[1]/2)*(2000/bedvalues.shape[1])
-# bedvalues = bedvalues*-2
-# print(bedvalues)
 def get_descendants(region_d,region_p,previous_slice,mask):
     region_d
     descendants = list(np.unique(previous_slice[mask]))
@@ -92,15 +75,6 @@ def find_GLIB_of_region(region_id,region_descendents,region_parents,region_depth
         region_id = region_parents[region_id]
         count+=1
     print("All the way out: ", count)
-    # while region_id in region_parents.keys():
-    #     for i in region_descendents[region_id] + [start_id]:
-    #         if i in ocean_regions and region_id != start_id:
-    #             #print("doing something")
-    #             return prev_id, region_depths[prev_id]
-    #         elif i in ocean_regions and region_id == start_id:
-    #             return None,None
-    #     prev_id = region_id
-    #     region_id = region_parents[region_id]
     return start_id, np.nan
 
 def ocean_regions(region_depths,region_map,icemask):
@@ -123,7 +97,7 @@ def ocean_regions(region_depths,region_map,icemask):
 # # plt.imshow(bedvalues)
 # # print(np.max(bedvalues))
 # # plt.show()
-# r_p,r_z, r_d, r_parents, r_m = build_contour_tree(bedvalues,step=100,start=-2000,stop=0)                
+# r_p,r_z, r_d, r_parents, r_m = build_contour_tree(bedvalues,step=5,start=-2000,stop=0)                
 # #plt.imshow(r_m)
 # #plt.show()
 
@@ -132,67 +106,62 @@ def ocean_regions(region_depths,region_map,icemask):
 # with open("data/contourtree.pickle","wb") as f:
 #    pickle.dump([r_p,r_z,r_d,r_parents,r_m],f)
 
-with open("data/contourtree.pickle","rb") as f:
-   r_p,r_z,r_d,r_parents,r_m = pickle.load(f)
+# with open("data/contourtree.pickle","rb") as f:
+#    r_p,r_z,r_d,r_parents,r_m = pickle.load(f)
 
-bedvalues = bedmap.bed.values
-icemask = bedmap.icemask_grounded_and_shelves.values
-baths = np.full_like(baths,np.nan)
-o_r = ocean_regions(r_z,r_m,icemask)
+# bedvalues = bedmap.bed.values
+# icemask = bedmap.icemask_grounded_and_shelves.values
+# baths = np.full_like(baths,np.nan)
+# o_r = ocean_regions(r_z,r_m,icemask)
+# # omap = np.full_like(bedvalues,np.nan)
+# # for k in o_r:
+# #     omap[r_m==k] = 1
+# #     omap[r_m==r_parents[k]] = 1
+# #     omap[r_m==r_parents[r_parents[k]]] = 1
+# #     omap[r_m==r_parents[r_parents[r_parents[k]]]] = 1
+# #     omap[r_m==r_parents[r_parents[r_parents[r_parents[k]]]]] = 1
+# # plt.imshow(omap)
+# # plt.show()
+
+# found_glibs = {}
+# r_ids = np.full_like(baths,np.nan)
+# for l in tqdm(range(len(grid))):
+#     coord = grid[l]
+#     if bedvalues[coord[1],coord[0]]<-1:
+#         r_id = int(r_m[coord[1],coord[0]])
+#         r_ids[l] = r_id
+#         depth = np.nan
+#         if r_id not in o_r and ~np.in1d(r_d[r_id],o_r).any():
+#             if not (r_id in found_glibs.keys()):
+#                 eyed,depth = find_GLIB_of_region(r_id,r_d,r_parents,r_z,o_r)
+#                 found_glibs[r_id] = (eyed,depth)
+#             else:
+#                 eyed,depth = found_glibs[r_id]
+#         baths[l]=depth
+
+# # x,y = physical.T[0],physical.T[1]
+# # #c = plt.scatter(x,y,c="pink")
+# # #c = plt.scatter(x,y,c=baths)
+# # plt.colorbar(c)
+# # plt.show()
+# baths[np.isnan(baths)]=1
+# with open("data/contourtreeglibs.pickle","wb") as f:
+#     pickle.dump([baths,found_glibs],f)
+
+with open("data/contourtreeglibs.pickle","rb") as f:
+   baths,found_glibs = pickle.load(f)
+
+
+
+
+# print("done with baths")
 # omap = np.full_like(bedvalues,np.nan)
-# for k in o_r:
-#     omap[r_m==k] = 1
-#     omap[r_m==r_parents[k]] = 1
-#     omap[r_m==r_parents[r_parents[k]]] = 1
-#     omap[r_m==r_parents[r_parents[r_parents[k]]]] = 1
-#     omap[r_m==r_parents[r_parents[r_parents[r_parents[k]]]]] = 1
-# plt.imshow(omap)
+# already_colored = []
+# print(
+# plt.imshow(bedvalues)
+# c = plt.imshow(omap,cmap="jet")
+# plt.colorbar(c)
 # plt.show()
-
-found_glibs = {}
-r_ids = np.full_like(baths,np.nan)
-for l in tqdm(range(len(grid))):
-    coord = grid[l]
-    if bedvalues[coord[1],coord[0]]<-1:
-        r_id = int(r_m[coord[1],coord[0]])
-        r_ids[l] = r_id
-        depth = np.nan
-        if r_id not in o_r and ~np.in1d(r_d[r_id],o_r).any():
-            if not (r_id in found_glibs.keys()):
-                eyed,depth = find_GLIB_of_region(r_id,r_d,r_parents,r_z,o_r)
-                found_glibs[r_id] = (eyed,depth)
-            else:
-                eyed,depth = found_glibs[r_id]
-        baths[l]=depth
-
-x,y = physical.T[0],physical.T[1]
-#c = plt.scatter(x,y,c="pink")
-c = plt.scatter(x,y,c=baths)
-plt.colorbar(c)
-plt.show()
-baths[np.isnan(baths)]=1
-
-
-
-print("done with baths")
-omap = np.full_like(bedvalues,np.nan)
-already_colored = []
-print("graphing bathtubs")
-for k in tqdm(found_glibs.keys()):
-    p = found_glibs[k]
-    if p[1]:
-        omap[r_m==k] = p[1]
-        for d in r_d[p[0]]:
-            if d not in already_colored:
-                already_colored.append(d)
-                omap[r_m==d] = p[1]
-            
-
-print("graphing")
-plt.imshow(bedvalues)
-c = plt.imshow(omap,cmap="jet")
-plt.colorbar(c)
-plt.show()
 #print("points: ", r_p)
 # print("r_z: ", r_z)
 # print("r_d: ", r_d)
@@ -204,54 +173,20 @@ plt.show()
 
 
 
-shelf_profiles, shelf_profile_heat_functions = generate_shelf_profiles("data/woa18_decav81B0_s00_04.nc","data/woa18_decav81B0_t00_04.nc",polygons,bedmap)
-shelf_heat_content, shelf_heat_content_byshelf = heat_by_shelf(polygons,shelf_profile_heat_functions,baths,bedvalues,grid,physical,True)
+# shelf_profiles, shelf_profile_heat_functions = generate_shelf_profiles("data/woa18_decav81B0_s00_04.nc","data/woa18_decav81B0_t00_04.nc",polygons,bedmap)
+# shelf_heat_content, shelf_heat_content_byshelf = heat_by_shelf(polygons,shelf_profile_heat_functions,baths,bedvalues,grid,physical,False,intsize=20)
 
-# with open("data/shc_GLIB.pickle","wb") as f:
+# with open("data/shc_noGLIB.pickle","wb") as f:
 #    pickle.dump(shelf_heat_content_byshelf,f)
 
-# with open("data/shc_noGLIB.pickle","rb") as f:
-#    shelf_heat_content_byshelf_noGLIB = pickle.load(f)
+with open("data/shc_noGLIB.pickle","rb") as f:
+   shelf_heat_content_byshelf_noGLIB = pickle.load(f)
 
-# with open("data/shc_GLIB.pickle","rb") as f:
-#    shelf_heat_content_byshelf_GLIB = pickle.load(f)
-
-
-# rignot_shelf_massloss,rignot_shelf_areas = extract_rignot_massloss("data/rignot2019.xlsx")
-
-# # with open("data/polynainterp.pickle","rb") as f:
-# #    polyna = pickle.load(f)
-
-# # with open("data/shelfpolygons.pickle","rb") as f:
-# #     polygons = pickle.load(f)
-
-# # with open("data/polynabathtub.pickle","rb") as f:
-# #     polyna_in_shelf = pickle.load(f)
-
-# # # polyna_in_shelf_dist =  {}
-# # # for p in tqdm(polygons.keys()):
-# # #     shelf = polygons[p]
-# # #     centroid = list(shelf.centroid.coords)[0]
-# # #     mask = np.full_like(polyna,np.nan,dtype=bool)
-# # #     dist = t_content_byshelf,f)
-
-# with open("data/shc_noGLIB.pickle","rb") as f:
-#    shelf_heat_content_byshelf_noGLIB = pickle.load(f)
-
-# with open("data/shc_GLIB.pickle","rb") as f:
-#    shelf_heat_content_byshelf_GLIB = pickle.load(f)
+with open("data/shc_GLIB.pickle","rb") as f:
+   shelf_heat_content_byshelf_GLIB = pickle.load(f)
 
 
-# rignot_shelf_massloss,rignot_shelf_areas = extract_rignot_massloss("data/rignot2019.xlsx")
-
-# with open("data/polynainterp.pickle","rb") as f:
-#    polyna = pickle.load(f)
-
-# with open("data/shelfpolygons.pickle","rb") as f:
-#     polygons = pickle.load(f)
-
-# with open("data/polynabathtub.pickle","rb") as f:
-#     polyna_in_shelf = pickle.load(f)
+rignot_shelf_massloss,rignot_shelf_areas = extract_rignot_massloss("data/rignot2019.xlsx")
 
 # # # polyna_in_shelf_dist =  {}
 # # # for p in tqdm(polygons.keys()):
@@ -264,68 +199,30 @@ shelf_heat_content, shelf_heat_content_byshelf = heat_by_shelf(polygons,shelf_pr
 # # #     mask[dist<radius] = True
 # # #     mask[dist>radius] = False
 # # #     polyna_in_shelf_dist[p] = np.nansum(polyna[mask])
-
-# # bedvalues = bedmap.bed.values
-# # pdb.set_trace()
-# # bathtub_volume = {}
-# # points_by_shelf = {}
-# # for p in tqdm(polygons.keys()):
-# #     bathtub_volume[p] = 0
-# #     polyna_in_shelf[p] = 0
-# #     points_by_shelf[p] = [0]
-# # xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
-# # for i in tqdm(range(len(bathtubs))):
-# #     bd = bathtub_depths[i]
-# #     b = bathtubs[i]
-# #     shelf = polygons[p]
-# #     centroid = tuple([np.nanmean(xvals[b]),np.nanmean(yvals[b])])
-# #     cn,_,_ = closest_shelf(centroid,polygons)
-# #     # if cn == "Thwaites" and len(b[0])>100:
-# #     omap = np.full_like(bedvalues,np.nan)
-# #     omap[b] = polyna[b]
-# #     #     plt.imshow(bedvalues)
-# #     #     plt.imshow(omap)
-# #     #     plt.show()
-# #     for l in grid:
-# #         if omap[l[1],l[0]]:
-# #             points_by_shelf[cn].append(1)
-# #     if np.max(polyna[b])>0:
-# #         if cn in rignot_shelf_areas:
-# #             polyna_in_shelf[cn] += np.nansum(polyna[b])*np.sum((points_by_shelf[cn]))
+with open("data/polynainterp.pickle","rb") as f:
+   polyna = pickle.load(f)
 
 
+bedvalues = bedmap.bed.values
+bathtub_volume = {}
+points_by_shelf = {}
+for p in tqdm(polygons.keys()):
+    bathtub_volume[p] = 0
+    polyna_in_shelf[p] = []
+    points_by_shelf[p] = [0]
 
-# with open("data/polynabathtub.pickle","wb") as f:
-#     pickle.dump(polyna_in_shelf,f)
+o_r = ocean_regions(r_z,r_m,icemask)
+xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
+for i in tqdm(range(bedmap.bed.shape[0])):
+    for j in range(bedmap.bed.shape[1]):
+        cn,_,_ = closest_shelf((xvals[i],yvals[j]),polygons)
+        if ~(np.in1d(r_d[r_m[i,j]],o_r).any()):
+            polyna_in_shelf[cn].append(polyna[i,j])
+
+with open("data/polynabathtub.pickle","wb") as f:
+    pickle.dump(polyna_in_shelf,f)
 with open("data/polynabathtub.pickle","rb") as f:
     polyna_in_shelf = pickle.load(f)
-# rignot_shelf_massloss["Filcher-Ronne"] = rignot_shelf_massloss["Filchner"]+rignot_shelf_massloss["Ronne"]
-# shelf_heat_content_byshelf_GLIB["Filcher-Ronne"] = shelf_heat_content_byshelf_GLIB["Filchner"]+shelf_heat_content_byshelf_GLIB["Ronne"]
-# shelf_heat_content_byshelf_noGLIB["Filcher-Ronne"] = shelf_heat_content_byshelf_noGLIB["Filchner"]+shelf_heat_content_byshelf_noGLIB["Ronne"]
-
-# rignot_shelf_massloss["Crosson-Dotson"] = rignot_shelf_massloss["Crosson"]+rignot_shelf_massloss["Dotson"]
-# shelf_heat_content_byshelf_GLIB["Crosson-Dotson"] = shelf_heat_content_byshelf_GLIB["Crosson"]+shelf_heat_content_byshelf_GLIB["Dotson"]
-# shelf_heat_content_byshelf_noGLIB["Crosson-Dotson"] = shelf_heat_content_byshelf_noGLIB["Crosson"]+shelf_heat_content_byshelf_noGLIB["Dotson"]
-
-# del rignot_shelf_massloss["Crosson"]
-# del rignot_shelf_massloss["Dotson"]
-# del shelf_heat_content_byshelf_noGLIB["Dotson"]
-# del shelf_heat_content_byshelf_noGLIB["Crosson"]
-# del shelf_heat_content_byshelf_GLIB["Crosson"]
-# del shelf_heat_content_byshelf_GLIB["Dotson"]
-# del rignot_shelf_massloss["LarsenB"]
-# del rignot_shelf_massloss["George_VI"]
-# del shelf_heat_content_byshelf_noGLIB["LarsenB"]
-# del shelf_heat_content_byshelf_noGLIB["George_VI"]
-# del shelf_heat_content_byshelf_GLIB["LarsenB"]
-# del shelf_heat_content_byshelf_GLIB["George_VI"]
-
-# del rignot_shelf_massloss["Filchner"]
-# del rignot_shelf_massloss["Ronne"]
-# del shelf_heat_content_byshelf_noGLIB["Filchner"]
-# del shelf_heat_content_byshelf_noGLIB["Ronne"]
-# del shelf_heat_content_byshelf_GLIB["Filchner"]
-# del shelf_heat_content_byshelf_GLIB["Ronne"]
 
 fig,(ax1,ax2) = plt.subplots(1,2)
 shc= []
@@ -346,6 +243,7 @@ prate,shc,smb= np.asarray(prate), np.asarray(shc), np.asarray(smb)
 ax1.set_xlabel("Mean heat content +- 50 dbar of max(groundingline,GLIB)")
 ax1.scatter(shc[prate<=0],smb[prate<=0],marker="x")
 ax1.scatter(shc[prate>0],smb[prate>0],c=np.log10(prate[prate>0]),cmap="jet_r")
+#ax1.scatter(shc,smb)
 ax1.set_xlabel("Mean heat content +- 50 dbar of groundingline")
 ax1.set_ylabel("Mass Loss from Rignot 2019")
 
@@ -369,6 +267,7 @@ prate,shc,smb= np.asarray(prate), np.asarray(shc), np.asarray(smb)
 ax2.set_xlabel("Mean heat content +- 50 dbar of max(groundingline,GLIB)")
 ax2.scatter(shc[prate<=0],smb[prate<=0],marker="x")
 c= ax2.scatter(shc[prate>0],smb[prate>0],c=np.log10(prate[prate>0]),cmap="jet_r")
+#ax2.scatter(shc,smb)
 plt.colorbar(c)
 plt.show()
 

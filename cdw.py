@@ -100,7 +100,7 @@ def heat_content(heat_function,depth,plusminus):
     ynew = heat_function(xnew)
     return np.trapz(ynew,xnew)-np.ptp(xnew)*gsw.CT_freezing(34.5,depth,0)
 
-def heat_by_shelf(polygons,heat_functions,baths,bedvalues,grid,physical,withGLIB=True):
+def heat_by_shelf(polygons,heat_functions,baths,bedvalues,grid,physical,withGLIB=True,intsize=50):
     shelf_heat_content = []
     shelf_heat_content_byshelf={}
     shelf_ice_boundary_byshelf={}
@@ -120,7 +120,7 @@ def heat_by_shelf(polygons,heat_functions,baths,bedvalues,grid,physical,withGLIB
         if baths[l]<0:
             coord = physical[l]
             shelfname, _,_ = closest_shelf(coord,polygons)
-            shelf_heat_content.append(heat_content(heat_functions[shelfname],-baths[l],50))
+            shelf_heat_content.append(heat_content(heat_functions[shelfname],-baths[l],intsize))
             shelf_heat_content_byshelf[shelfname].append(shelf_heat_content[-1])
         else:
             shelf_heat_content.append(np.nan)
