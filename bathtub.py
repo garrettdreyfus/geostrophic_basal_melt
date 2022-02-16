@@ -137,6 +137,16 @@ def GLB_search_bulk(shelf,gl_points,polygons,distance_mask):
 
 
 
+def get_grounding_line_length(gl_physical,polygons):
+    shelf_count = {}
+    for k in polygons.keys():
+        shelf_count[k] = 0
+    for l in tqdm(gl_physical):
+        cn, cp, distance = closest_shelf([l[0],l[1]],polygons)
+        shelf_count[cn] = shelf_count[cn]+1
+    return shelf_count
+
+
 
 def get_grounding_line_points(shelf,polygons):
     margin_coords = []

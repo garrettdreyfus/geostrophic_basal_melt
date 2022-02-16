@@ -129,7 +129,6 @@ def heat_by_shelf(polygons,heat_functions,baths,bedvalues,grid,physical,withGLIB
 def extract_rignot_massloss(fname):
     dfs = pd.read_excel(fname,sheet_name=None)
     dfs = dfs['Dataset_S1_PNAS_2018']
-    print(dfs.keys())
     rignot_shelf_massloss={}
     rignot_shelf_areas = {}
     for l in range(len(dfs["Glacier name"])):

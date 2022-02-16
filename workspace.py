@@ -1,6 +1,8 @@
 from cdw import *
 from bathtub import *
+import winds
 import pdb
+from sklearn.tree import DecisionTreeRegressor
 
 with open("data/shelfpolygons.pickle","rb") as f:
     polygons = pickle.load(f)
@@ -9,7 +11,6 @@ with open("data/GLBsearchresults.pickle","rb") as f:
     physical,grid,baths,bathtubs,bathtub_depths = pickle.load(f)
 
 def get_descendants(region_d,region_p,previous_slice,mask):
-    region_d
     descendants = list(np.unique(previous_slice[mask]))
     for eyed in np.unique(previous_slice[mask]):
         if eyed != 0:
@@ -17,7 +18,6 @@ def get_descendants(region_d,region_p,previous_slice,mask):
     return list(np.unique(descendants))
 
 def build_contour_tree(bedvalues,step=20,start=-2000,stop=0):
-    
     ## previous slice
     previous_slice = np.full_like(bedvalues,0)
     unique_id = 0
@@ -106,23 +106,13 @@ def ocean_regions(region_depths,region_map,icemask):
 # with open("data/contourtree.pickle","wb") as f:
 #    pickle.dump([r_p,r_z,r_d,r_parents,r_m],f)
 
-# with open("data/contourtree.pickle","rb") as f:
-#    r_p,r_z,r_d,r_parents,r_m = pickle.load(f)
+with open("data/contourtree.pickle","rb") as f:
+   r_p,r_z,r_d,r_parents,r_m = pickle.load(f)
 
 # bedvalues = bedmap.bed.values
 # icemask = bedmap.icemask_grounded_and_shelves.values
 # baths = np.full_like(baths,np.nan)
 # o_r = ocean_regions(r_z,r_m,icemask)
-# # omap = np.full_like(bedvalues,np.nan)
-# # for k in o_r:
-# #     omap[r_m==k] = 1
-# #     omap[r_m==r_parents[k]] = 1
-# #     omap[r_m==r_parents[r_parents[k]]] = 1
-# #     omap[r_m==r_parents[r_parents[r_parents[k]]]] = 1
-# #     omap[r_m==r_parents[r_parents[r_parents[r_parents[k]]]]] = 1
-# # plt.imshow(omap)
-# # plt.show()
-
 # found_glibs = {}
 # r_ids = np.full_like(baths,np.nan)
 # for l in tqdm(range(len(grid))):
@@ -139,11 +129,6 @@ def ocean_regions(region_depths,region_map,icemask):
 #                 eyed,depth = found_glibs[r_id]
 #         baths[l]=depth
 
-# # x,y = physical.T[0],physical.T[1]
-# # #c = plt.scatter(x,y,c="pink")
-# # #c = plt.scatter(x,y,c=baths)
-# # plt.colorbar(c)
-# # plt.show()
 # baths[np.isnan(baths)]=1
 # with open("data/contourtreeglibs.pickle","wb") as f:
 #     pickle.dump([baths,found_glibs],f)
@@ -155,22 +140,10 @@ with open("data/contourtreeglibs.pickle","rb") as f:
 
 
 # print("done with baths")
-# omap = np.full_like(bedvalues,np.nan)
-# already_colored = []
-# print(
-# plt.imshow(bedvalues)
-# c = plt.imshow(omap,cmap="jet")
-# plt.colorbar(c)
-# plt.show()
-#print("points: ", r_p)
+# print("points: ", r_p)
 # print("r_z: ", r_z)
 # print("r_d: ", r_d)
 # print("r_parents: ", r_parents)
-
-
-
-#for p in range(-2000,2000,20):
-
 
 
 # shelf_profiles, shelf_profile_heat_functions = generate_shelf_profiles("data/woa18_decav81B0_s00_04.nc","data/woa18_decav81B0_t00_04.nc",polygons,bedmap)
@@ -203,27 +176,47 @@ with open("data/polynainterp.pickle","rb") as f:
    polyna = pickle.load(f)
 
 
-bedvalues = bedmap.bed.values
-bathtub_volume = {}
-points_by_shelf = {}
-for p in tqdm(polygons.keys()):
-    bathtub_volume[p] = 0
-    polyna_in_shelf[p] = []
-    points_by_shelf[p] = [0]
+# bedvalues = bedmap.bed.values
+# bathtub_volume = {}
+# points_by_shelf = {}
+# polyna_in_shelf = {}
+# for p in tqdm(polygons.keys()):
+#     bathtub_volume[p] = 0
+#     polyna_in_shelf[p] = []
+#     points_by_shelf[p] = [0]
 
-o_r = ocean_regions(r_z,r_m,icemask)
-xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
-for i in tqdm(range(bedmap.bed.shape[0])):
-    for j in range(bedmap.bed.shape[1]):
-        cn,_,_ = closest_shelf((xvals[i],yvals[j]),polygons)
-        if ~(np.in1d(r_d[r_m[i,j]],o_r).any()):
-            polyna_in_shelf[cn].append(polyna[i,j])
+# icemask = bedmap.icemask_grounded_and_shelves.values
+# o_r = ocean_regions(r_z,r_m,icemask)
+# xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
+# print("starting polyna stuff")
+# print(np.sum(polyna>0))
+# answers = {}
+# for i in tqdm(range(bedmap.bed.shape[0])):
+#     for j in range(bedmap.bed.shape[1]):
+#         if icemask[i,j] !=0 and polyna[i,j] != 0 and ~np.isnan(r_m[i,j]) and bedvalues[i,j] > -1500:
+#             cn,_,_ = closest_shelf((bedmap.x[i],bedmap.y[j]),polygons)
+#             r_id  = r_m[i,j]
+#             if r_id not in answers:
+#                 answers[r_id] = ~(np.in1d(r_d[r_id],o_r).any())
+#             if answers[r_id]:
+#                 polyna_in_shelf[cn].append(polyna[i,j])
 
-with open("data/polynabathtub.pickle","wb") as f:
-    pickle.dump(polyna_in_shelf,f)
+# with open("data/polynabathtub.pickle","wb") as f:
+#     pickle.dump(polyna_in_shelf,f)
 with open("data/polynabathtub.pickle","rb") as f:
     polyna_in_shelf = pickle.load(f)
 
+# gl_length = get_grounding_line_length(physical,polygons)
+# with open("data/gl_length.pickle","wb") as f:
+#     pickle.dump(gl_length,f)
+with open("data/gl_length.pickle","rb") as f:
+    gl_length = pickle.load(f)
+
+with open("data/shelfpolygons.pickle","rb") as f:
+    polygons = pickle.load(f)
+icemask = bedmap.icemask_grounded_and_shelves.values
+winds_by_shelf = winds.AMPS_wind(polygons,"data/AMPS_winds.mat",icemask)
+polyna_in_shelf = winds_by_shelf
 fig,(ax1,ax2) = plt.subplots(1,2)
 shc= []
 smb = []
@@ -236,16 +229,23 @@ for k in rignot_shelf_massloss.keys():
         d = np.asarray(d)
         d = d[np.logical_and(d>m-s,d<m+s)]
         shc.append(np.nanmean(d))
-        smb.append(rignot_shelf_massloss[k])
+        smb.append(rignot_shelf_massloss[k])#/gl_length[k])
         prate.append(polyna_in_shelf[k])
+        # if len(polyna_in_shelf[k])>0:
+        #     prate.append(np.nanmedian(polyna_in_shelf[k]))
+        # else:
+        #     prate.append(0)
+        #ax1.text(shc[-1],smb[-1],k)
 
 prate,shc,smb= np.asarray(prate), np.asarray(shc), np.asarray(smb)
 ax1.set_xlabel("Mean heat content +- 50 dbar of max(groundingline,GLIB)")
-ax1.scatter(shc[prate<=0],smb[prate<=0],marker="x")
-ax1.scatter(shc[prate>0],smb[prate>0],c=np.log10(prate[prate>0]),cmap="jet_r")
+#ax1.scatter(shc[prate<=0],smb[prate<=0],marker="x")
+#ax1.scatter(shc[prate>0],smb[prate>0],c=np.log10(prate[prate>0]),cmap="jet_r")
+ax1.scatter(shc,smb,c=prate,cmap="jet_r")
+#ax1.scatter(prate,shc,c=smb,cmap="magma",vmin=-3,vmax=0)
 #ax1.scatter(shc,smb)
-ax1.set_xlabel("Mean heat content +- 50 dbar of groundingline")
-ax1.set_ylabel("Mass Loss from Rignot 2019")
+ax1.set_ylabel("Mean heat content +- 50 dbar of groundingline")
+ax1.set_xlabel("Winter Zonal Surface wind average")
 
 shc= []
 smb = []
@@ -258,19 +258,25 @@ for k in rignot_shelf_massloss.keys():
         d = np.asarray(d)
         d = d[np.logical_and(d>m-s,d<m+s)]
         shc.append(np.nanmean(d))
-        smb.append(rignot_shelf_massloss[k])
+        smb.append(rignot_shelf_massloss[k])#/gl_length[k])
         x = np.nanmedian(polyna_in_shelf[k])
         #if len(polyna_in_shelf[k])>0:
         prate.append(polyna_in_shelf[k])
-        #ax2.text(shc[-1],smb[-1],k)
+        # if len(polyna_in_shelf[k])>0:
+        #     prate.append(np.nanmedian(polyna_in_shelf[k]))
+        # else:
+        #     prate.append(0)
+        #ax2.text(prate[-1],smb[-1],k)
 prate,shc,smb= np.asarray(prate), np.asarray(shc), np.asarray(smb)
-ax2.set_xlabel("Mean heat content +- 50 dbar of max(groundingline,GLIB)")
-ax2.scatter(shc[prate<=0],smb[prate<=0],marker="x")
-c= ax2.scatter(shc[prate>0],smb[prate>0],c=np.log10(prate[prate>0]),cmap="jet_r")
+#ax2.set_ylabel("Mean heat content +- 50 dbar of max(groundingline,GLIB)")
+ax2.set_xlabel("Winter Zonal Surface wind average")
+#ax2.scatter(shc[prate<=0],smb[prate<=0],marker="x")
+c = ax2.scatter(shc,smb,c=prate,cmap="jet_r")
+#c = ax2.scatter(prate,shc,c=smb,cmap="magma")
+# c= ax2.scatter(shc[prate>0],smb[prate>0],c=np.log10(prate[prate>0]),cmap="jet_r")
 #ax2.scatter(shc,smb)
 plt.colorbar(c)
 plt.show()
-
 
 # pc = bedmap.icemask_grounded_and_shelves.plot.pcolormesh(
 #   ax=ax, cmap=cmocean.cm.haline, cbar_kwargs=dict(pad=0.01, aspect=30)
