@@ -3,6 +3,9 @@ from bathtub import *
 import winds
 import pdb
 from sklearn.tree import DecisionTreeRegressor
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LinearRegression
 
 with open("data/shelfpolygons.pickle","rb") as f:
     polygons = pickle.load(f)
@@ -146,6 +149,8 @@ with open("data/contourtreeglibs.pickle","rb") as f:
 # print("r_parents: ", r_parents)
 
 
+# bedvalues = bedmap.bed.values
+# #
 # shelf_profiles, shelf_profile_heat_functions = generate_shelf_profiles("data/woa18_decav81B0_s00_04.nc","data/woa18_decav81B0_t00_04.nc",polygons,bedmap)
 # shelf_heat_content, shelf_heat_content_byshelf = heat_by_shelf(polygons,shelf_profile_heat_functions,baths,bedvalues,grid,physical,False,intsize=20)
 
@@ -159,7 +164,7 @@ with open("data/shc_GLIB.pickle","rb") as f:
    shelf_heat_content_byshelf_GLIB = pickle.load(f)
 
 
-rignot_shelf_massloss,rignot_shelf_areas = extract_rignot_massloss("data/rignot2019.xlsx")
+rignot_shelf_massloss,rignot_shelf_areas,sigma = extract_rignot_massloss("data/rignot2019.xlsx")
 
 # # # polyna_in_shelf_dist =  {}
 # # # for p in tqdm(polygons.keys()):
@@ -176,7 +181,6 @@ with open("data/polynainterp.pickle","rb") as f:
    polyna = pickle.load(f)
 
 
-# bedvalues = bedmap.bed.values
 # bathtub_volume = {}
 # points_by_shelf = {}
 # polyna_in_shelf = {}
@@ -206,7 +210,7 @@ with open("data/polynainterp.pickle","rb") as f:
 with open("data/polynabathtub.pickle","rb") as f:
     polyna_in_shelf = pickle.load(f)
 
-# gl_length = get_grounding_line_length(physical,polygons)
+#gl_length = get_grounding_line_length(physical,polygons)
 # with open("data/gl_length.pickle","wb") as f:
 #     pickle.dump(gl_length,f)
 with open("data/gl_length.pickle","rb") as f:
@@ -216,62 +220,102 @@ with open("data/shelfpolygons.pickle","rb") as f:
     polygons = pickle.load(f)
 icemask = bedmap.icemask_grounded_and_shelves.values
 winds_by_shelf = winds.AMPS_wind(polygons,"data/AMPS_winds.mat",icemask)
-polyna_in_shelf = winds_by_shelf
 fig,(ax1,ax2) = plt.subplots(1,2)
-shc= []
+shcsum= []
+shcmean= []
 smb = []
-prate = []
 c = []
+prate = []
+sigmas = []
+areas=[]
+lengths = []
 for k in rignot_shelf_massloss.keys():
     if k in shelf_heat_content_byshelf_noGLIB.keys():
         d = shelf_heat_content_byshelf_noGLIB[k]
-        m,s = np.nanmedian(d),2*np.nanstd(d)
+        m,s = np.median(d),2*np.nanstd(d)
         d = np.asarray(d)
         d = d[np.logical_and(d>m-s,d<m+s)]
-        shc.append(np.nanmean(d))
-        smb.append(rignot_shelf_massloss[k])#/gl_length[k])
-        prate.append(polyna_in_shelf[k])
-        # if len(polyna_in_shelf[k])>0:
-        #     prate.append(np.nanmedian(polyna_in_shelf[k]))
-        # else:
-        #     prate.append(0)
-        #ax1.text(shc[-1],smb[-1],k)
-
-prate,shc,smb= np.asarray(prate), np.asarray(shc), np.asarray(smb)
+        if len(d)>0:
+            shcsum.append(np.nansum(d))
+            shcmean.append(np.nanmean(d))
+            lengths.append(len(d))
+            areas.append((rignot_shelf_areas[k]))
+            smb.append(rignot_shelf_massloss[k])
+            x = np.nanmedian(polyna_in_shelf[k])
+            #if len(polyna_in_shelf[k])>0:
+            prate.append(polyna_in_shelf[k])
+            #sigmas.append(max(sigma[k]/(abs(rignot_shelf_massloss[k])+0.01),1))
+            sigmas.append(sigma[k])
+prate,smb,areas= np.asarray(prate),  np.asarray(smb), np.asarray(areas)
+shcsum,shcmean,lengths = np.asarray(shcsum), np.asarray(shcmean), np.asarray(lengths)
+X = np.asarray([shcsum,shcmean,lengths,areas,(1/lengths),(1/areas),np.sqrt(areas),np.sqrt(lengths)]).T
+scaler = StandardScaler()
+scaler.fit(X)
+X = scaler.transform(X)
+y = smb
+rf = RandomForestRegressor(max_depth=2, random_state=1)
+rf.fit(X,y)
+print(rf.feature_importances_)
+  
 ax1.set_xlabel("Mean heat content +- 50 dbar of max(groundingline,GLIB)")
 #ax1.scatter(shc[prate<=0],smb[prate<=0],marker="x")
 #ax1.scatter(shc[prate>0],smb[prate>0],c=np.log10(prate[prate>0]),cmap="jet_r")
-ax1.scatter(shc,smb,c=prate,cmap="jet_r")
+ax1.scatter(shcmean,smb,cmap="jet_r")
+#ax1.scatter(wrate,prate,c=prate,cmap="jet_r")
 #ax1.scatter(prate,shc,c=smb,cmap="magma",vmin=-3,vmax=0)
 #ax1.scatter(shc,smb)
 ax1.set_ylabel("Mean heat content +- 50 dbar of groundingline")
 ax1.set_xlabel("Winter Zonal Surface wind average")
 
-shc= []
+shcsum= []
+shcmean= []
 smb = []
 c = []
 prate = []
+sigmas = []
+areas=[]
+lengths = []
 for k in rignot_shelf_massloss.keys():
     if k in shelf_heat_content_byshelf_noGLIB.keys():
         d = shelf_heat_content_byshelf_GLIB[k]
         m,s = np.median(d),2*np.nanstd(d)
         d = np.asarray(d)
         d = d[np.logical_and(d>m-s,d<m+s)]
-        shc.append(np.nanmean(d))
-        smb.append(rignot_shelf_massloss[k])#/gl_length[k])
-        x = np.nanmedian(polyna_in_shelf[k])
-        #if len(polyna_in_shelf[k])>0:
-        prate.append(polyna_in_shelf[k])
+        if len(d)>0:
+            shcsum.append(np.nansum(d))
+            shcmean.append(np.nanmean(d))
+            lengths.append(len(d))
+            areas.append((rignot_shelf_areas[k]))
+            smb.append(rignot_shelf_massloss[k])
+            x = np.nanmedian(polyna_in_shelf[k])
+            #if len(polyna_in_shelf[k])>0:
+            prate.append(polyna_in_shelf[k])
+            #sigmas.append(max(sigma[k]/(abs(rignot_shelf_massloss[k])+0.01),1))
+            sigmas.append(sigma[k])
         # if len(polyna_in_shelf[k])>0:
         #     prate.append(np.nanmedian(polyna_in_shelf[k]))
         # else:
         #     prate.append(0)
         #ax2.text(prate[-1],smb[-1],k)
-prate,shc,smb= np.asarray(prate), np.asarray(shc), np.asarray(smb)
+prate,smb,areas= np.asarray(prate), np.asarray(smb), np.asarray(areas)
+shcsum,shcmean,lengths = np.asarray(shcsum), np.asarray(shcmean), np.asarray(lengths)
+# X = np.asarray([shcsum,areas]).T
+# scaler = StandardScaler()
+# scaler.fit(X)
+# X = scaler.transform(X)
+# y = smb
+# rf = RandomForestRegressor(max_depth=5, random_state=1)
+# lr = LinearRegression().fit(X,y)
+# print(lr.coef_)
+
+# rf.fit(X,y)
+# print(rf.feature_importances_)
 #ax2.set_ylabel("Mean heat content +- 50 dbar of max(groundingline,GLIB)")
 ax2.set_xlabel("Winter Zonal Surface wind average")
 #ax2.scatter(shc[prate<=0],smb[prate<=0],marker="x")
-c = ax2.scatter(shc,smb,c=prate,cmap="jet_r")
+c = ax2.scatter(shcsum,smb,cmap="jet_r")
+
+#ax2.errorbar(shc[~np.isnan(shc)],smb[~np.isnan(shc)],yerr=sigmas[~np.isnan(shc)],fmt="o")
 #c = ax2.scatter(prate,shc,c=smb,cmap="magma")
 # c= ax2.scatter(shc[prate>0],smb[prate>0],c=np.log10(prate[prate>0]),cmap="jet_r")
 #ax2.scatter(shc,smb)
@@ -291,13 +335,13 @@ plt.show()
 
 
 ##MAP VIEW GLB COMPARISON
-shcno, _ = heat_by_shelf(polygons,shelf_profile_heat_functions,copy(baths),bedvalues,grid,physical,False)
-shcyes, _ = heat_by_shelf(polygons,shelf_profile_heat_functions,baths,bedvalues,grid,physical,True)
-x,y = physical.T[0],physical.T[1]
+# shcno, _ = heat_by_shelf(polygons,shelf_profile_heat_functions,copy(baths),bedvalues,grid,physical,False)
+# shcyes, _ = heat_by_shelf(polygons,shelf_profile_heat_functions,baths,bedvalues,grid,physical,True)
+# x,y = physical.T[0],physical.T[1]
 
-fig,(ax1,ax2) = plt.subplots(1,2)
-ax1.scatter(x,y,c = shcno,vmin=-100,vmax=500,cmap="jet")
-c = ax2.scatter(x,y,c = shcyes,vmin=-100,vmax=500,cmap="jet")
-plt.colorbar(c)
+# fig,(ax1,ax2) = plt.subplots(1,2)
+# ax1.scatter(x,y,c = shcno,vmin=-100,vmax=500,cmap="jet")
+# c = ax2.scatter(x,y,c = shcyes,vmin=-100,vmax=500,cmap="jet")
+# plt.colorbar(c)
 
-plt.show()
+# plt.show()

@@ -26,7 +26,7 @@ def create_depth_mask(da,d,limit):
                 depthmask[i,j] = (d[~np.isnan(da.values[0,:,i,j])][-1]>limit)
     return depthmask
 
-def shelf_average_profile(shelf,sal,temp,d):
+def shelf_average_profile(shelfpoints,sal,temp,d):
     centroid = list(shelf.centroid.coords)[0]
     mask = np.full_like(sal.s_an[0,0,:,:].values,np.nan,dtype=bool)
     dist = np.sqrt((sal.coords["x"]- centroid[0])**2 + (sal.coords["y"] - centroid[1])**2)
@@ -47,23 +47,10 @@ def shelf_average_profile(shelf,sal,temp,d):
             average_t.append(np.nanmean(temp.t_an.values[0,i][mask]))
     return mask, average_t, average_s,d
 
-def generate_shelf_profiles(salfname,tempfname,polygons,shelf):
-    sal = xarray.open_dataset(salfname,decode_times=False)
-    temp = xarray.open_dataset(tempfname,decode_times=False)
-    sal = sal.where(sal.lat<-60,drop=True)
-    temp= temp.where(sal.lat<-60,drop=True)
-    t_an = temp.t_an.values
-    s_an = sal.s_an.values
-    d = sal.depth.values
-    lons=sal.lon.values
-    lats=sal.lat.values
-    projection = pyproj.Proj("epsg:3031")
-    lons,lats = np.meshgrid(sal.lon,sal.lat)
-    x,y = projection.transform(lons,lats)
-    sal.coords["x"]= (("lat","lon"),x)
-    sal.coords["y"]= (("lat","lon"),y)
-    depthmask = create_depth_mask(sal.s_an,sal.depth.values,1000)
-    shelf_profiles = {}
+def generate_shelf_profiles(woafname,is_points,polygons):
+    with open("data/woawithbed.pickle","rb") as f:
+        sal,temp = pickle.load(f)
+
     for shelfname in polygons.keys():
         shelf = polygons[shelfname]
         _,average_t, average_s,d = shelf_average_profile(shelf,sal,temp,d)
@@ -95,10 +82,12 @@ def ice_boundary_in_bathtub(bathtubs,icemask):
 
 def heat_content(heat_function,depth,plusminus):
     #heat = gsw.cp_t_exact(s,t,d)
-    xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,5000))
+    depth = np.abs(depth)
+    xnew= np.arange(max(depth-2,0),depth)
     #print(xnew,depth,max(d))
     ynew = heat_function(xnew)
-    return np.trapz(ynew,xnew)-np.ptp(xnew)*gsw.CT_freezing(34.5,depth,0)
+    #xnew,ynew = xnew[ynew>0],ynew[ynew>0]
+    return np.trapz(ynew,xnew)-np.dot(np.diff(xnew),gsw.CT_freezing(34.5,(xnew[:-1]+xnew[1:])/2,0))
 
 def heat_by_shelf(polygons,heat_functions,baths,bedvalues,grid,physical,withGLIB=True,intsize=50):
     shelf_heat_content = []
@@ -131,11 +120,17 @@ def extract_rignot_massloss(fname):
     dfs = dfs['Dataset_S1_PNAS_2018']
     rignot_shelf_massloss={}
     rignot_shelf_areas = {}
+    sigma = {}
     for l in range(len(dfs["Glacier name"])):
-        if  dfs["Glacier name"][l]:
-            rignot_shelf_massloss[dfs["Glacier name"][l]] = dfs["Cumul Balance"][l]
-            rignot_shelf_areas[dfs["Glacier name"][l]] = dfs["Basin.1"][l]
-    return rignot_shelf_massloss, rignot_shelf_areas
+        if  dfs["Glacier name"][l] and type(dfs["σ SMB"][l])==float:
+            try:
+                sigma[dfs["Glacier name"][l]]= float(dfs["σ SMB"][l])+float(dfs["σ D"][l])
+                rignot_shelf_massloss[dfs["Glacier name"][l]] = dfs["Cumul Balance"][l]
+                rignot_shelf_areas[dfs["Glacier name"][l]] = dfs["Basin.1"][l]
+            except:
+                1+1
+            
+    return rignot_shelf_massloss, rignot_shelf_areas,sigma
 
 
 llset = open_CtlDataset('data/polynall.ctl')

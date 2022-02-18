@@ -148,7 +148,7 @@ def get_grounding_line_length(gl_physical,polygons):
 
 
 
-def get_grounding_line_points(shelf,polygons):
+def get_line_points(shelf,polygons,mode):
     margin_coords = []
     mx = []
     my = []
@@ -164,6 +164,9 @@ def get_grounding_line_points(shelf,polygons):
     physical_cords = []
     grid_indexes = []
     depths=[]
+    shelves = {}
+    for k in polygons.keys():
+        shelves[k] = []
     print("Grabbing grounding line points")
     for i in tqdm(range(1,icemask.shape[0]-1)):
         for j in  range(1,icemask.shape[1]-1):
@@ -172,19 +175,21 @@ def get_grounding_line_points(shelf,polygons):
                 b = icemask[i-1][j]
                 c = icemask[i][j+1]
                 d = icemask[i][j-1]
-                if (np.asarray([a,b,c,d])==0).any():
-                #if (np.isnan([a,b,c,d])).any():
+                if (mode=="gl" and (np.asarray([a,b,c,d])==0).any())) or (mode=="is" and (np.isnan(np.asarray([a,b,c,d])).any())):
                     physical_cords.append([shelf.x[j],shelf.y[i]])
+                    cn, _, _ = closest_shelf([shelf.x[j],shelf.y[i]],polygons)
+                    shelves[cn].append([shelf.x[j],shelf.y[i]])
                     grid_indexes.append([j,i])
                     depths.append(beddepth[i,j])
     # plt.imshow(beddepth,vmin=-2000,vmax=2000)
     # grid_indexes = np.asarray(grid_indexes).T
     # plt.scatter(grid_indexes[0],grid_indexes[1])
     # plt.show()
-    return physical_cords, grid_indexes, depths
+    return physical_cords, grid_indexes, depths,shelves
+
 
 def shelf_baths(shelf,polygons):
-    physical, grid,depths = get_grounding_line_points(shelf,polygons)
+    physical, grid,depths,_ = get_line_points(shelf,polygons,"gl")
     s = np.argsort(depths)
     s=s[::-1]
     physical,grid,depths = np.asarray(physical)[s],np.asarray(grid)[s],np.asarray(depths)[s]
