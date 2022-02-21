@@ -171,20 +171,19 @@ def get_line_points(shelf,polygons,mode):
     for i in tqdm(range(1,icemask.shape[0]-1)):
         for j in  range(1,icemask.shape[1]-1):
             if icemask[i][j] == 1:
-                a = icemask[i+1][j]
-                b = icemask[i-1][j]
-                c = icemask[i][j+1]
-                d = icemask[i][j-1]
-                if (mode=="gl" and (np.asarray([a,b,c,d])==0).any())) or (mode=="is" and (np.isnan(np.asarray([a,b,c,d])).any())):
-                    physical_cords.append([shelf.x[j],shelf.y[i]])
-                    cn, _, _ = closest_shelf([shelf.x[j],shelf.y[i]],polygons)
-                    shelves[cn].append([shelf.x[j],shelf.y[i]])
+                if (mode=="gl" and (icemask[i-1:i+1,j-1:j+1]==0).any()) or (mode=="is" and np.isnan(icemask[i-1:i+1,j-1:j+1]).any()):
+                    physical_cords.append([shelf.x.values[j],shelf.y.values[i]])
+                    cn, _, _ = closest_shelf([shelf.x.values[j],shelf.y.values[i]],polygons)
+                    shelves[cn].append([shelf.x.values[j],shelf.y.values[i]])
                     grid_indexes.append([j,i])
                     depths.append(beddepth[i,j])
     # plt.imshow(beddepth,vmin=-2000,vmax=2000)
     # grid_indexes = np.asarray(grid_indexes).T
     # plt.scatter(grid_indexes[0],grid_indexes[1])
     # plt.show()
+    pc = np.asarray(physical_cords)
+    plt.scatter(pc.T[0],pc.T[1])
+    plt.show()
     return physical_cords, grid_indexes, depths,shelves
 
 

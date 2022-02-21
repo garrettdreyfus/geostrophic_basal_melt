@@ -25,6 +25,10 @@ temp.coords["y"]= (("lat","lon"),y)
 xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
 sal["bed"] = bedmap.bed.interp(x=sal.x,y=sal.y)
 temp["bed"] = bedmap.bed.interp(x=temp.x,y=temp.y)
+sal["icemask"] = bedmap.icemask_grounded_and_shelves.interp(x=sal.x,y=sal.y)
+temp["icemask"] = bedmap.icemask_grounded_and_shelves.interp(x=sal.x,y=sal.y)
+sal.icemask.values[sal.icemask.values<1]=0
+temp.icemask.values[temp.icemask.values<1]=0
 
 with open("data/woawithbed.pickle","wb") as f:
    pickle.dump([sal,temp],f)

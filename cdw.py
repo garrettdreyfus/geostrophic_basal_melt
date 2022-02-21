@@ -1,4 +1,4 @@
-import shapefile
+#import shapefile
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 import rockhound as rh
@@ -26,35 +26,80 @@ def create_depth_mask(da,d,limit):
                 depthmask[i,j] = (d[~np.isnan(da.values[0,:,i,j])][-1]>limit)
     return depthmask
 
-def shelf_average_profile(shelfpoints,sal,temp,d):
-    centroid = list(shelf.centroid.coords)[0]
-    mask = np.full_like(sal.s_an[0,0,:,:].values,np.nan,dtype=bool)
-    dist = np.sqrt((sal.coords["x"]- centroid[0])**2 + (sal.coords["y"] - centroid[1])**2)
-    radius=1000*10**3
-    mask[dist<radius] = True
-    mask[dist>radius] = False
-    average_s = []
-    average_t = []
-    [LAT,LON] = np.meshgrid(sal.lon,sal.lat)
-    for i in range(len(d)):
-        if np.sum(~np.isnan(sal.s_an.values[0,i][mask])) < 10:
-            average_s.append(np.nan)
-            average_t.append(np.nan)
-        else:
-            s = gsw.SA_from_SP(sal.s_an.values[0,i][mask],d[i],LON[mask],LAT[mask])
-            t = gsw.CT_from_t(s,temp.t_an.values[0,i][mask],d[i])
-            average_s.append(np.nanmean(sal.s_an.values[0,i][mask]))
-            average_t.append(np.nanmean(temp.t_an.values[0,i][mask]))
+def shelf_average_profile(shelfpolygon,shelfpoints,sal,temp):
+    d  = sal.depth.values
+    sp = np.asarray(shelfpoints).T
+    centroid = np.nanmean(sp,axis=1)
+    print(centroid)
+    angle = np.degrees(np.arctan2(centroid[1],centroid[0]))
+    rdist = np.sqrt((sal.coords["x"]- centroid[0])**2 + (sal.coords["y"] - centroid[1])**2)
+    angles = np.degrees(np.arctan2(sal.coords["y"],sal.coords["x"]))
+    aslice = np.abs((angles-angle))<20
+    lons,lats = np.meshgrid(sal.lon,sal.lat)
+    #mask = np.logical_and(np.logical_and(sal.bed.values>-1000, np.isnan(sal.icemask)),rdist<500*10**3)
+    #not as nice with less than -1000
+    #mask = np.logical_and(sal.bed.values<-2000,rdist<1000*10**3)
+    #mask = rdist<1000*10**3
+    # greater than -1000 good
+    # no ice is better than ice
+    #mask = np.logical_and(np.logical_and(sal.bed.values>-1000,np.isnan(sal.icemask.values)),rdist<1000*10**3)
+    #mask = np.logical_and.reduce(np.asarray((sal.bed.values<-1000,sal.bed.values>-1100,np.isnan(sal.icemask.values)),rdist<1000*10**3))
+    #mask = np.logical_and(np.isnan(sal.icemask.values),rdist<1000*10**3)
+    #mask = np.logical_and(np.isnan(sal.icemask.values),rdist<1000*10**3)
+    #mask = rdist<1000*10**3
+    # plt.imshow(mask)
+    # plt.show()
+    #mask = np.logical_and(aslice,rdist<1000*10**3)
+    #mask = np.logical_and(mask,sal.bed.values>-1000)
+    #mask = np.logical_and(aslice,sal.bed.values<0)
+    #mask = np.logical_and(rdist<1000*10**3,sal.bed.values>-1000)
+    mask = rdist<1000*10**4
+    xs,ys = sal.x.values[mask],sal.y.values[mask]
+    # plt.scatter(sal.x.values.flatten(),sal.y.values.flatten(),c=sal.bed.values.flatten())
+    # plt.scatter(xs,ys)
+    # plt.colorbar()
+    # plt.show()
+    salvals,tempvals = sal.s_an.values[0,:,:,:],temp.t_an.values[0,:,:,:]
+    salvals,tempvals = np.moveaxis(salvals,0,-1),np.moveaxis(tempvals,0,-1)
+    average_s_profiles = []
+    average_t_profiles = []
+    coords = []
+    # for i in shelfpoints:
+    #     coord = np.argmin((xs-i[0])**2 + (ys-i[1])**2)
+    #     coords.append(coord)
+    #     #print("slow?")
+    #     s = gsw.SA_from_SP(salvals[mask][coord][:],d,lons[mask][coord],lats[mask][coord])
+    #     #s = salvals[mask][coord][:]
+    #     #t = tempvals[mask][coord][:]
+    #     t = gsw.CT_from_t(s,tempvals[mask][coord][:],d)
+    #     #print("part?")
+    #     average_s_profiles.append(s)
+    #     average_t_profiles.append(t)
+
+    average_s_profiles = salvals[mask]
+    average_t_profiles = tempvals[mask]
+    shelfpoints = np.asarray(shelfpoints).T
+    coords = np.asarray(coords).T
+    # plt.scatter(xs,ys)
+    # plt.scatter(shelfpoints[0],shelfpoints[1])
+    # plt.scatter(xs[coords[0]],ys[coords[1]])
+    # plt.show()
+    average_s_profiles = np.asarray(average_s_profiles)
+    average_s = np.nanmean(average_s_profiles,axis=0)
+    average_t_profiles = np.asarray(average_t_profiles)
+    average_t = np.nanmean(average_t_profiles,axis=0)
+
     return mask, average_t, average_s,d
 
 def generate_shelf_profiles(woafname,is_points,polygons):
     with open("data/woawithbed.pickle","rb") as f:
         sal,temp = pickle.load(f)
-
-    for shelfname in polygons.keys():
-        shelf = polygons[shelfname]
-        _,average_t, average_s,d = shelf_average_profile(shelf,sal,temp,d)
-        shelf_profiles[shelfname] = (average_t,average_s,d)
+    shelf_profiles = {}
+    for shelfname in tqdm(polygons.keys()):
+        if len(is_points[shelfname]):
+            print(shelfname)
+            _,average_t, average_s,d = shelf_average_profile(polygons[shelfname],is_points[shelfname],sal,temp)
+            shelf_profiles[shelfname] = (average_t,average_s,d)
 
     shelf_profile_heat_functions = {}
     for k in shelf_profiles.keys():
@@ -83,7 +128,7 @@ def ice_boundary_in_bathtub(bathtubs,icemask):
 def heat_content(heat_function,depth,plusminus):
     #heat = gsw.cp_t_exact(s,t,d)
     depth = np.abs(depth)
-    xnew= np.arange(max(depth-2,0),depth)
+    xnew= np.arange(max(0,depth-25),min(depth+25,5000))
     #print(xnew,depth,max(d))
     ynew = heat_function(xnew)
     #xnew,ynew = xnew[ynew>0],ynew[ynew>0]
@@ -96,7 +141,6 @@ def heat_by_shelf(polygons,heat_functions,baths,bedvalues,grid,physical,withGLIB
     for k in polygons.keys():
         shelf_heat_content_byshelf[k] = []
         shelf_ice_boundary_byshelf[k] = []
-
     if withGLIB:
         for l in range(len(baths)):
             if baths[l]>=0:
@@ -109,8 +153,12 @@ def heat_by_shelf(polygons,heat_functions,baths,bedvalues,grid,physical,withGLIB
         if baths[l]<0:
             coord = physical[l]
             shelfname, _,_ = closest_shelf(coord,polygons)
-            shelf_heat_content.append(heat_content(heat_functions[shelfname],-baths[l],intsize))
-            shelf_heat_content_byshelf[shelfname].append(shelf_heat_content[-1])
+            if shelfname in heat_functions.keys():
+                shelf_heat_content.append(heat_content(heat_functions[shelfname],-baths[l],intsize))
+                shelf_heat_content_byshelf[shelfname].append(shelf_heat_content[-1])
+            else:
+                shelf_heat_content.append(np.nan)
+                shelf_heat_content_byshelf[shelfname].append(np.nan)
         else:
             shelf_heat_content.append(np.nan)
     return shelf_heat_content, shelf_heat_content_byshelf
@@ -133,15 +181,16 @@ def extract_rignot_massloss(fname):
     return rignot_shelf_massloss, rignot_shelf_areas,sigma
 
 
-llset = open_CtlDataset('data/polynall.ctl')
-projection = pyproj.Proj("epsg:3031")
-lons,lats = np.meshgrid(llset.lon,llset.lat)
-x,y = projection.transform(lons,lats)
-llset.pr.values[0,:,:][llset.pr.values[0,:,:]==0] = np.nan
-llset.coords["x"]= (("lat","lon"),x)
-llset.coords["y"]= (("lat","lon"),y)
-bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
-# xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
+# llset = open_CtlDataset('data/polynall.ctl')
+# projection = pyproj.Proj("epsg:3031")
+# lons,lats = np.meshgrid(llset.lon,llset.lat)
+# x,y = projection.transform(lons,lats)
+# llset.pr.values[0,:,:][llset.pr.values[0,:,:]==0] = np.nan
+# llset.coords["x"]= (("lat","lon"),x)
+# llset.coords["y"]= (("lat","lon"),y)
+# bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
+# #
+#xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
 # projection = pyproj.Proj("epsg:4326")
 # print("transform")
 # xvals,yvals = projection.transform(xvals,yvals)
