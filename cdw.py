@@ -38,7 +38,7 @@ def shelf_average_profile(shelfpolygon,shelfpoints,sal,temp):
     lons,lats = np.meshgrid(sal.lon,sal.lat)
     #mask = np.logical_and(np.logical_and(sal.bed.values>-1000, np.isnan(sal.icemask)),rdist<500*10**3)
     #not as nice with less than -1000
-    #mask = np.logical_and(sal.bed.values<-2000,rdist<1000*10**3)
+    mask = np.logical_and(np.isnan(sal.icemask.values),sal.bed.values<-2000)
     #mask = rdist<1000*10**3
     # greater than -1000 good
     # no ice is better than ice
@@ -53,7 +53,8 @@ def shelf_average_profile(shelfpolygon,shelfpoints,sal,temp):
     #mask = np.logical_and(mask,sal.bed.values>-1000)
     #mask = np.logical_and(aslice,sal.bed.values<0)
     #mask = np.logical_and(rdist<1000*10**3,sal.bed.values>-1000)
-    mask = rdist<1000*10**4
+    #mask = rdist<1000*10**3
+    #mask = rdist>0
     xs,ys = sal.x.values[mask],sal.y.values[mask]
     # plt.scatter(sal.x.values.flatten(),sal.y.values.flatten(),c=sal.bed.values.flatten())
     # plt.scatter(xs,ys)
@@ -64,24 +65,22 @@ def shelf_average_profile(shelfpolygon,shelfpoints,sal,temp):
     average_s_profiles = []
     average_t_profiles = []
     coords = []
-    # for i in shelfpoints:
-    #     coord = np.argmin((xs-i[0])**2 + (ys-i[1])**2)
-    #     coords.append(coord)
-    #     #print("slow?")
-    #     s = gsw.SA_from_SP(salvals[mask][coord][:],d,lons[mask][coord],lats[mask][coord])
-    #     #s = salvals[mask][coord][:]
-    #     #t = tempvals[mask][coord][:]
-    #     t = gsw.CT_from_t(s,tempvals[mask][coord][:],d)
-    #     #print("part?")
-    #     average_s_profiles.append(s)
-    #     average_t_profiles.append(t)
-
-    average_s_profiles = salvals[mask]
-    average_t_profiles = tempvals[mask]
+    for i in shelfpoints:
+        coord = np.argmin((xs-i[0])**2 + (ys-i[1])**2)
+        coords.append(coord)
+        s = gsw.SA_from_SP(salvals[mask][coord][:],d,lons[mask][coord],lats[mask][coord])
+        #s = salvals[mask][coord][:]
+        #t = tempvals[mask][coord][:]
+        t = gsw.CT_from_t(s,tempvals[mask][coord][:],d)
+        #print("part?")
+        average_s_profiles.append(s)
+        average_t_profiles.append(t)
+    #average_s_profiles = salvals[mask]
+    #average_t_profiles = tempvals[mask]
     shelfpoints = np.asarray(shelfpoints).T
     coords = np.asarray(coords).T
     # plt.scatter(xs,ys)
-    # plt.scatter(shelfpoints[0],shelfpoints[1])
+    # plt.scatter(shelfpoints[0],shelfpoints[1],)
     # plt.scatter(xs[coords[0]],ys[coords[1]])
     # plt.show()
     average_s_profiles = np.asarray(average_s_profiles)
@@ -104,7 +103,7 @@ def generate_shelf_profiles(woafname,is_points,polygons):
     shelf_profile_heat_functions = {}
     for k in shelf_profiles.keys():
         t,s,d = shelf_profiles[k] 
-        shelf_profile_heat_functions[k] = interpolate.interp1d(d,np.asarray(t))
+        shelf_profile_heat_functions[k] = (interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s)))
 
     return shelf_profiles, shelf_profile_heat_functions
 
@@ -128,11 +127,14 @@ def ice_boundary_in_bathtub(bathtubs,icemask):
 def heat_content(heat_function,depth,plusminus):
     #heat = gsw.cp_t_exact(s,t,d)
     depth = np.abs(depth)
-    xnew= np.arange(max(0,depth-25),min(depth+25,5000))
+    xnew= np.arange(0,min(depth+0,5000))
+    #xnew= np.arange(max(0,depth-25),min(depth+25,5000))
     #print(xnew,depth,max(d))
-    ynew = heat_function(xnew)
+    ynew = heat_function[0](xnew)
     #xnew,ynew = xnew[ynew>0],ynew[ynew>0]
-    return np.trapz(ynew,xnew)-np.dot(np.diff(xnew),gsw.CT_freezing(34.5,(xnew[:-1]+xnew[1:])/2,0))
+    ynew = ynew - gsw.CT_freezing(heat_function[1](xnew),xnew,0)
+    return np.nansum(ynew>1)/np.sum(~np.isnan(ynew))
+    #return np.trapz(ynew,xnew)-np.dot(np.diff(xnew),gsw.CT_freezing(heat_function[1]((xnew[:-1]+xnew[1:])/2),(xnew[:-1]+xnew[1:])/2,0))
 
 def heat_by_shelf(polygons,heat_functions,baths,bedvalues,grid,physical,withGLIB=True,intsize=50):
     shelf_heat_content = []
