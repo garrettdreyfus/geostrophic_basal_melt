@@ -75,8 +75,8 @@ def shelf_average_profile(shelfpolygon,shelfpoints,sal,temp):
         #print("part?")
         average_s_profiles.append(s)
         average_t_profiles.append(t)
-    #average_s_profiles = salvals[mask]
-    #average_t_profiles = tempvals[mask]
+    # average_s_profiles = salvals[mask]
+    # average_t_profiles = tempvals[mask]
     shelfpoints = np.asarray(shelfpoints).T
     coords = np.asarray(coords).T
     # plt.scatter(xs,ys)
@@ -106,6 +106,29 @@ def generate_shelf_profiles(woafname,is_points,polygons):
         shelf_profile_heat_functions[k] = (interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s)))
 
     return shelf_profiles, shelf_profile_heat_functions
+
+def cdw_interface_depth(shelf_profiles):
+    interface_depths = {}
+    for k in shelf_profiles.keys():
+        depths = shelf_profiles[k][2]
+        newdepths = range(int(np.nanmin(depths)),int(np.nanmax(depths)))
+        ct = np.interp(newdepths,shelf_profiles[k][2],shelf_profiles[k][0])
+        sa = np.interp(newdepths,shelf_profiles[k][2],shelf_profiles[k][1])
+        pot_dens = gsw.sigma0(sa,ct)+1000
+        pt = gsw.pt_from_CT(sa,ct)
+        interface_i = int(np.nanargmax(pt)/2)
+        nsquared = gsw.Nsquared(sa,ct,newdepths,-70)
+        pmid = nsquared[1]
+        p_i = np.where(pmid>20)[0][0]
+        drho = (np.nanmean(pot_dens[0:interface_i])-np.nanmean(pot_dens[interface_i:interface_i*2]))/((newdepths[interface_i*2]-newdepths[0])/2)#(np.nanmean(pot_dens[0:interface_i*2]))
+        gprime = -(9.8*drho)/1025.0
+        #plt.plot(nsquared[0],nsquared[1])
+        #plt.show()
+        nsquared = nsquared[0]
+        nsquared = np.nanmedian(nsquared[p_i:interface_i*2])
+        nsquared = gprime
+        interface_depths[k] = (newdepths[np.nanargmax(pt)]/2,gprime,nsquared)
+    return interface_depths
 
 def ice_boundary_in_bathtub(bathtubs,icemask):
     ice_boundary_points = []
