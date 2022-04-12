@@ -1,4 +1,3 @@
-from numba import njit
 import pickle
 import numpy as np
 import rockhound as rh

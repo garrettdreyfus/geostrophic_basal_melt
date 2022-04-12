@@ -15,6 +15,8 @@ from scipy import interpolate
 import pandas as pd
 from copy import copy
 import xarray as xr
+from scipy.ndimage import binary_dilation
+import skfmm
 
 
 
@@ -150,13 +152,17 @@ def ice_boundary_in_bathtub(bathtubs,icemask):
 def heat_content(heat_function,depth,plusminus):
     #heat = gsw.cp_t_exact(s,t,d)
     depth = np.abs(depth)
-    xnew= np.arange(0,min(depth+0,5000))
+    xnew= np.arange(50,min(depth+0,5000))
     #xnew= np.arange(max(0,depth-25),min(depth+25,5000))
     #print(xnew,depth,max(d))
     ynew = heat_function[0](xnew)
     #xnew,ynew = xnew[ynew>0],ynew[ynew>0]
     ynew = ynew - gsw.CT_freezing(heat_function[1](xnew),xnew,0)
-    return np.nansum(ynew>1)/np.sum(~np.isnan(ynew))
+    #return np.nansum(ynew>1.2)/np.sum(~np.isnan(ynew))
+    if len(ynew)>0:
+        return np.nanmax(ynew)
+    else:
+        return np.nan
     #return np.trapz(ynew,xnew)-np.dot(np.diff(xnew),gsw.CT_freezing(heat_function[1]((xnew[:-1]+xnew[1:])/2),(xnew[:-1]+xnew[1:])/2,0))
 
 def heat_by_shelf(polygons,heat_functions,baths,bedvalues,grid,physical,withGLIB=True,intsize=50):
@@ -227,4 +233,46 @@ def extract_rignot_massloss(fname):
 # with open("data/polynainterp.pickle","wb") as f:
 #     pickle.dump(polyna,f)
 
+
+def new_closest_WOA(physical,grid,baths,bedmap):
+    print("hi")
+    with open("data/woawithbed.pickle","rb") as f:
+        sal,temp = pickle.load(f)
+
+    depth = np.asarray(bedmap.bed.values)
+    depthmask = depth>-2100
+    ice = np.asarray(bedmap.icemask_grounded_and_shelves.values)
+    closest_points=[np.nan]*len(baths)
+    print(np.sum(~np.isnan(baths)))
+    iceanddepth = np.logical_and(ice!=0,depthmask)
+    #for l in tqdm(range(len(solution))):
+    insidedepthmask = depth<-1900
+    bordermask = np.logical_and(insidedepthmask,depthmask)
+    bordermask = np.logical_and(bordermask,np.isnan(ice))
+    for l in tqdm(range(len(grid))):
+        iso_z=baths[l]+5
+        if ~np.isnan(iso_z):
+            below = np.logical_and((depth<=iso_z),iceanddepth)
+            square_mask=np.zeros_like(below)
+            square_mask[max(0,grid[l][1]-1000):min(grid[l][1]+1000,square_mask.shape[0]),max(0,grid[l][0]-1000):min(grid[l][0]+1000,square_mask.shape[1])]=1
+            below = np.logical_and(below,square_mask)
+            below = np.logical_and(below,depth>-2010)
+            seed = np.ones_like(below,dtype=float)
+            seed[grid[l][1],grid[l][0]] = -1
+            m = np.ma.MaskedArray(seed,~below)
+            z = skfmm.distance(m)
+            z.mask[~bordermask] = 1
+            z.set_fill_value(np.inf)
+            closest_points[l] = np.unravel_index(z.argmin(), z.shape)
+    with open("data/cdw_closest.pickle","wb") as f:
+        pickle.dump(closest_points,f)
+    with open("data/cdw_closest.pickle","rb") as f:
+        closest_points = pickle.load(f)
+    plt.imshow(depth)
+    for l in tqdm(range(len(closest_points))):
+        if ~np.isnan(closest_points[l]).any():
+            plt.plot([grid[l][0],closest_points[l][1]],[grid[l][1],closest_points[l][0]],c="red")
+            plt.scatter(grid[l][0],grid[l][1],c="red")
+    plt.show()
+    
 
