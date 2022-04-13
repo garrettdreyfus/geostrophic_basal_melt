@@ -10,14 +10,17 @@ from sklearn.linear_model import LinearRegression
 
 with open("data/shelfpolygons.pickle","rb") as f:
     polygons = pickle.load(f)
-
-with open("data/GLBsearchresults.pickle","rb") as f:
-    physical,grid,_,bathtubs,bathtub_depths = pickle.load(f)
-
 with open("data/GLIBnew.pickle","rb") as f:
     GLIB = pickle.load(f)
 
 bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
+# physical, grid, depths, shelves = get_line_points(bedmap,polygons,"gl")
+
+# with open("data/groundinglinepoints.pickle","wb") as f:
+#     pickle.dump([physical,grid,depths,shelves],f)
+with open("data/groundinglinepoints.pickle","rb") as f:
+    physical,grid,depths,shelves = pickle.load(f)
+
 
 bedvalues = bedmap.bed.values
 
@@ -26,9 +29,6 @@ for l in range(len(grid)):
     baths.append(GLIB[grid[l][1]][grid[l][0]])
 
 new_closest_WOA(physical,grid,baths,bedmap)
-x,y = physical.T[0],physical.T[1]
-plt.scatter(x,y,c=baths)
-plt.show()
 
 # # # # #bedmach = convert_bedmachine("data/BedMachine.nc")
 # # bedvalues = bedmap.bed.values

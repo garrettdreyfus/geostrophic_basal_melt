@@ -17,6 +17,7 @@ from copy import copy
 import xarray as xr
 from scipy.ndimage import binary_dilation
 import skfmm
+from matplotlib import collections  as mc
 
 
 
@@ -233,12 +234,10 @@ def extract_rignot_massloss(fname):
 # with open("data/polynainterp.pickle","wb") as f:
 #     pickle.dump(polyna,f)
 
+def pfun(physical,grid,baths,bordermask,l):
 
 def new_closest_WOA(physical,grid,baths,bedmap):
-    print("hi")
-    with open("data/woawithbed.pickle","rb") as f:
-        sal,temp = pickle.load(f)
-
+    # print("hi")
     depth = np.asarray(bedmap.bed.values)
     depthmask = depth>-2100
     ice = np.asarray(bedmap.icemask_grounded_and_shelves.values)
@@ -246,33 +245,50 @@ def new_closest_WOA(physical,grid,baths,bedmap):
     print(np.sum(~np.isnan(baths)))
     iceanddepth = np.logical_and(ice!=0,depthmask)
     #for l in tqdm(range(len(solution))):
-    insidedepthmask = depth<-1900
+    insidedepthmask = depth<-1600
     bordermask = np.logical_and(insidedepthmask,depthmask)
-    bordermask = np.logical_and(bordermask,np.isnan(ice))
+    #bordermask = np.logical_and(bordermask,np.isnan(ice))
     for l in tqdm(range(len(grid))):
+    #for l in range(41044,41047):
         iso_z=baths[l]+5
         if ~np.isnan(iso_z):
-            below = np.logical_and((depth<=iso_z),iceanddepth)
-            square_mask=np.zeros_like(below)
-            square_mask[max(0,grid[l][1]-1000):min(grid[l][1]+1000,square_mask.shape[0]),max(0,grid[l][0]-1000):min(grid[l][0]+1000,square_mask.shape[1])]=1
-            below = np.logical_and(below,square_mask)
-            below = np.logical_and(below,depth>-2010)
-            seed = np.ones_like(below,dtype=float)
-            seed[grid[l][1],grid[l][0]] = -1
-            m = np.ma.MaskedArray(seed,~below)
-            z = skfmm.distance(m)
-            z.mask[~bordermask] = 1
-            z.set_fill_value(np.inf)
-            closest_points[l] = np.unravel_index(z.argmin(), z.shape)
-    with open("data/cdw_closest.pickle","wb") as f:
-        pickle.dump(closest_points,f)
+            try:
+                below = np.logical_and((depth<=iso_z),iceanddepth)
+                square_mask=np.zeros_like(below)
+                square_mask[max(0,grid[l][1]-1500):min(grid[l][1]+1500,square_mask.shape[0]),max(0,grid[l][0]-1500):min(grid[l][0]+1500,square_mask.shape[1])]=1
+                below = np.logical_and(below,square_mask)
+                below = np.logical_and(below,depth>-2010)
+                seed = np.ones_like(below,dtype=float)
+                seed[grid[l][1],grid[l][0]] = -1
+                m = np.ma.MaskedArray(seed,~below)
+                # plt.imshow(bordermask)
+                # plt.imshow(m)
+                # plt.scatter(grid[l][0],grid[l][1],c='red')
+                # plt.show()
+                z = skfmm.distance(m)
+                # plt.imshow(z)
+                # plt.show()
+                z.mask[~bordermask] = 1
+                z.set_fill_value(np.inf)
+                closest_points[l] = np.unravel_index(z.argmin(), z.shape)
+            except Exception as e:
+                print(e)
+                print("problem")
+    # with open("data/cdw_closest.pickle","wb") as f:
+    #     pickle.dump(closest_points,f)
     with open("data/cdw_closest.pickle","rb") as f:
         closest_points = pickle.load(f)
-    plt.imshow(depth)
+    #plt.imshow(depth)
+    lines = []
     for l in tqdm(range(len(closest_points))):
         if ~np.isnan(closest_points[l]).any():
-            plt.plot([grid[l][0],closest_points[l][1]],[grid[l][1],closest_points[l][0]],c="red")
-            plt.scatter(grid[l][0],grid[l][1],c="red")
+            if closest_points[l][0]==0 and closest_points[l][1]==0:
+                print(l)
+            lines.append(([grid[l][0],grid[l][1]],[closest_points[l][1],closest_points[l][0]]))
+    lc = mc.LineCollection(lines, colors="red", linewidths=2)
+    fig, ax = plt.subplots()
+    ax.imshow(depth)
+    ax.add_collection(lc)
     plt.show()
     
 
