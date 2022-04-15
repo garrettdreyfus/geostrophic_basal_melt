@@ -18,6 +18,8 @@ import xarray as xr
 from scipy.ndimage import binary_dilation
 import skfmm
 from matplotlib import collections  as mc
+from functools import partial
+from tqdm.contrib.concurrent import process_map
 
 
 
@@ -234,48 +236,65 @@ def extract_rignot_massloss(fname):
 # with open("data/polynainterp.pickle","wb") as f:
 #     pickle.dump(polyna,f)
 
-def pfun(physical,grid,baths,bordermask,l):
+def pfun(physical,grid,depth,iceanddepth,baths,bordermask,l):
+    try:
+        iso_z=baths[l]+5
+        if ~np.isnan(iso_z):
+            below = np.logical_and((depth<=iso_z),iceanddepth)
+            square_mask=np.zeros_like(below)
+            square_mask[max(0,grid[l][1]-1500):min(grid[l][1]+1500,square_mask.shape[0]),max(0,grid[l][0]-1500):min(grid[l][0]+1500,square_mask.shape[1])]=1
+            below = np.logical_and(below,square_mask)
+            below = np.logical_and(below,depth>-2010)
+            seed = np.ones_like(below,dtype=float)
+            seed[grid[l][1],grid[l][0]] = -1
+            m = np.ma.MaskedArray(seed,~below)
+            # plt.imshow(bordermask)
+            # plt.imshow(m)
+            # plt.scatter(grid[l][0],grid[l][1],c='red')
+            # plt.show()
+            z = skfmm.distance(m)
+            # plt.imshow(z)
+            # plt.show()
+            z.mask[~bordermask] = 1
+            z.set_fill_value(np.inf)
+            return np.unravel_index(z.argmin(), z.shape)
+        return np.nan
+    except Exception as e:
+        print(e)
+        return np.nan
+
 
 def new_closest_WOA(physical,grid,baths,bedmap):
     # print("hi")
     depth = np.asarray(bedmap.bed.values)
-    depthmask = depth>-2100
+    depthmask = depth>-2300
     ice = np.asarray(bedmap.icemask_grounded_and_shelves.values)
     closest_points=[np.nan]*len(baths)
     print(np.sum(~np.isnan(baths)))
     iceanddepth = np.logical_and(ice!=0,depthmask)
     #for l in tqdm(range(len(solution))):
-    insidedepthmask = depth<-1600
+    insidedepthmask = depth<-1900
     bordermask = np.logical_and(insidedepthmask,depthmask)
+    bordermask = np.logical_and(bordermask,np.isnan(ice))
     #bordermask = np.logical_and(bordermask,np.isnan(ice))
-    for l in tqdm(range(len(grid))):
-    #for l in range(41044,41047):
-        iso_z=baths[l]+5
-        if ~np.isnan(iso_z):
-            try:
-                below = np.logical_and((depth<=iso_z),iceanddepth)
-                square_mask=np.zeros_like(below)
-                square_mask[max(0,grid[l][1]-1500):min(grid[l][1]+1500,square_mask.shape[0]),max(0,grid[l][0]-1500):min(grid[l][0]+1500,square_mask.shape[1])]=1
-                below = np.logical_and(below,square_mask)
-                below = np.logical_and(below,depth>-2010)
-                seed = np.ones_like(below,dtype=float)
-                seed[grid[l][1],grid[l][0]] = -1
-                m = np.ma.MaskedArray(seed,~below)
-                # plt.imshow(bordermask)
-                # plt.imshow(m)
-                # plt.scatter(grid[l][0],grid[l][1],c='red')
-                # plt.show()
-                z = skfmm.distance(m)
-                # plt.imshow(z)
-                # plt.show()
-                z.mask[~bordermask] = 1
-                z.set_fill_value(np.inf)
-                closest_points[l] = np.unravel_index(z.argmin(), z.shape)
-            except Exception as e:
-                print(e)
-                print("problem")
-    # with open("data/cdw_closest.pickle","wb") as f:
-    #     pickle.dump(closest_points,f)
+    #pool = multiprocessing.Pool(10)
+    f = partial(pfun,physical,grid,depth,iceanddepth,baths,bordermask)
+    #print(pool.map(f, range(len(grid))))
+    #closest_points = pool.map(f, range(10)))
+    closest_points = process_map(f, range(len(grid)),max_workers=11,chunksize=1000)
+    try:
+        pool.close()
+    except Exception as e:
+        print(e)
+
+    # for l in tqdm(range(5)):
+    #     try:
+    #         pfun(physical,grid,depth,iceanddepth,baths,bordermask,l,closest_points)
+    #     except Exception as e:
+    #         print(e)
+    #         print("problem")
+    with open("data/cdw_closest.pickle","wb") as f:
+        pickle.dump(closest_points,f)
     with open("data/cdw_closest.pickle","rb") as f:
         closest_points = pickle.load(f)
     #plt.imshow(depth)
