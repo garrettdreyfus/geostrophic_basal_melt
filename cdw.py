@@ -155,15 +155,15 @@ def ice_boundary_in_bathtub(bathtubs,icemask):
 def heat_content(heat_function,depth,plusminus):
     #heat = gsw.cp_t_exact(s,t,d)
     depth = np.abs(depth)
-    xnew= np.arange(50,min(depth+0,5000))
-    #xnew= np.arange(max(0,depth-25),min(depth+25,5000))
+    #xnew= np.arange(50,min(depth+0,5000))
+    xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,5000))
     #print(xnew,depth,max(d))
     ynew = heat_function[0](xnew)
     #xnew,ynew = xnew[ynew>0],ynew[ynew>0]
     ynew = ynew - gsw.CT_freezing(heat_function[1](xnew),xnew,0)
     #return np.nansum(ynew>1.2)/np.sum(~np.isnan(ynew))
     if len(ynew)>0:
-        return np.nanmax(ynew)
+        return np.trapz(ynew,xnew)
     else:
         return np.nan
     #return np.trapz(ynew,xnew)-np.dot(np.diff(xnew),gsw.CT_freezing(heat_function[1]((xnew[:-1]+xnew[1:])/2),(xnew[:-1]+xnew[1:])/2,0))
@@ -265,7 +265,6 @@ def pfun(physical,grid,depth,iceanddepth,baths,bordermask,l):
 
 
 def new_closest_WOA(physical,grid,baths,bedmap):
-    # print("hi")
     depth = np.asarray(bedmap.bed.values)
     depthmask = depth>-2300
     ice = np.asarray(bedmap.icemask_grounded_and_shelves.values)
@@ -310,4 +309,23 @@ def new_closest_WOA(physical,grid,baths,bedmap):
     ax.add_collection(lc)
     plt.show()
     
-
+def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp):
+    heats=[np.nan]*len(baths)
+    stx = sal.coords["x"].values
+    sty = sal.coords["y"].values
+    salvals,tempvals = sal.s_an.values[0,:,:,:],temp.t_an.values[0,:,:,:]
+    print(salvals.shape)
+    d  = sal.depth.values
+    print(len(d))
+    for l in tqdm(range(len(closest_points))):
+        if ~np.isnan(closest_points[l]).any():
+            centroid = [bedmap.coords["x"][closest_points[l][1]],bedmap.coords["y"][closest_points[l][0]]]
+            rdist = np.sqrt((sal.coords["x"]- centroid[0])**2 + (sal.coords["y"] - centroid[1])**2)
+            closest=np.unravel_index(rdist.argmin(), rdist.shape)
+            x = stx[closest[0],closest[1]]
+            y = sty[closest[0],closest[1]]
+            t = tempvals[:,closest[0],closest[1]]
+            s = salvals[:,closest[0],closest[1]]
+            tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
+            heats[l]=heat_content((tinterp,sinterp),baths[l],25)
+    return heats

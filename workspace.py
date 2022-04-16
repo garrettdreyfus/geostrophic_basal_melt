@@ -27,9 +27,36 @@ bedvalues = bedmap.bed.values
 baths = []
 for l in range(len(grid)):
     baths.append(GLIB[grid[l][1]][grid[l][0]])
+#new_closest_WOA(physical,grid,baths,bedmap)
 
-new_closest_WOA(physical,grid,baths,bedmap)
+with open("data/woawithbed.pickle","rb") as f:
+    sal,temp = pickle.load(f)
+with open("data/cdw_closest.pickle","rb") as f:
+    closest_points = pickle.load(f)
 
+
+# glibheats =  tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp)
+# bedvalues = bedmap.bed.values
+
+# baths = []
+# for l in range(len(grid)):
+#     baths.append(bedvalues[grid[l][1]][grid[l][0]])
+# noglibheats =  tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp)
+
+# with open("data/newheats.pickle","wb") as f:
+#     pickle.dump([noglibheats,glibheats],f)
+with open("data/newheats.pickle","rb") as f:
+    noglibheats,glibheats = pickle.load(f)
+
+fig, (ax1,ax2) = plt.subplots(1,2)
+physical = np.asarray(physical).T
+ax1.scatter(physical[0],physical[1],c=noglibheats,cmap="jet",vmin=0,vmax=200)
+c= ax2.scatter(physical[0],physical[1],c=glibheats,cmap="jet",vmin=0,vmax=200)
+plt.colorbar(c)
+plt.show()
+plt.scatter(physical[0],physical[1],c=np.asarray(glibheats)-np.asarray(noglibheats),vmin=-50,vmax=0,cmap="jet")
+plt.colorbar()
+plt.show()
 # # # # #bedmach = convert_bedmachine("data/BedMachine.nc")
 # # bedvalues = bedmap.bed.values
 
