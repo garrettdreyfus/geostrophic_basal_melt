@@ -25,9 +25,11 @@ def save_polygons():
         l = s[i]
         name = records[i].record[0]
         kind = records[i].record[3]
+        output = []
         if l.shapeTypeName == 'POLYGON' and kind== "FL":
+            print(l.parts)
             xs, ys = zip(*l.points)
-            polygons[name] = Polygon(l.points)
+            polygons[name] = [Polygon(l.points),l.parts]
             plt.annotate(name,(np.mean(xs),np.mean(ys)))
     plt.savefig("search.png")
     with open("data/shelfpolygons.pickle","wb") as f:

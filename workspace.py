@@ -7,13 +7,66 @@ from sklearn.tree import DecisionTreeRegressor
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
+from matplotlib.path import Path
+import shapely
+from matplotlib.colors import ListedColormap
 
 with open("data/shelfpolygons.pickle","rb") as f:
     polygons = pickle.load(f)
 with open("data/GLIBnew.pickle","rb") as f:
     GLIB = pickle.load(f)
-
 bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
+# shelfmaskkey={}
+# x, y = np.meshgrid(bedmap.x,bedmap.y)
+# fullmask = np.full_like(bedmap.bed.values,fill_value=0,dtype=int)
+# count=1
+# for k in tqdm(polygons.keys()):
+#     shelfmaskkey[k]=count
+#     polygon,parts = polygons[k]
+#     minx,miny,maxx,maxy = polygon.bounds
+#     firstmask = np.logical_and(np.logical_and(np.logical_and(x>minx,y>miny),x<maxx),y <maxy)
+#     coors=np.hstack((x[firstmask].reshape(-1, 1), y[firstmask].reshape(-1,1))) # coors.shape is (4000000,2)
+#     parts.append(-1)
+#     if len(parts)>1:
+#         centroid=np.mean(polygon.exterior.coords.xy,axis=1)
+#         plt.scatter(centroid[0],centroid[1])
+#         for l in range(0,len(parts)-1):
+#             poly_path=Path(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T)
+#             mask = poly_path.contains_points(coors)
+#             mask = mask*count
+#             fullmask[firstmask]=np.logical_or(mask,fullmask[firstmask])*count
+#     count=count+1
+# plt.show()
+
+# with open("data/shelfmask.pickle","wb") as f:
+#     pickle.dump([fullmask,shelfmaskkey],f)
+with open("data/shelfmask.pickle","rb") as f:
+    fullmask,shelfmaskkey = pickle.load(f)
+# randomcmap = ListedColormap(np.random.rand ( 256,3))
+# plt.imshow(fullmask,cmap=randomcmap,interpolation=None)
+# plt.show()
+deltaglib = GLIB-bedmap.bed.values
+shelfvolume={}
+fullmask[bedmap.icemask_grounded_and_shelves==0]=0
+print("assembling deltaglib")
+areas={}
+for k in tqdm(polygons.keys()):
+    if np.nansum(fullmask==shelfmaskkey[k])>0:
+        mask = np.logical_and(fullmask==shelfmaskkey[k],bedmap.icemask_grounded_and_shelves!=0)
+        areas[k]=np.nansum(mask)
+        shelfvolume[k]=np.nansum(deltaglib[mask])
+rignot_shelf_massloss,rignot_shelf_areas,sigma = extract_rignot_massloss("data/rignot2019.xlsx")
+print("plotting")
+for k in tqdm(rignot_shelf_massloss.keys()):
+    if k in shelfvolume.keys():
+        plt.scatter(rignot_shelf_massloss[k]/areas[k],shelfvolume[k]/areas[k])
+        plt.text(rignot_shelf_massloss[k]/areas[k],shelfvolume[k]/areas[k],k)
+    else:
+        print(k)
+plt.xlabel("Surface Mass Balance / Ice Shelf Area")
+plt.ylabel("Total Area Under Every GLIB on Shelf / Ice Shelf Area")
+plt.xlim(-1,0.1)
+plt.show()
 # physical, grid, depths, shelves = get_line_points(bedmap,polygons,"gl")
 
 # with open("data/groundinglinepoints.pickle","wb") as f:
@@ -21,6 +74,9 @@ bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounde
 with open("data/groundinglinepoints.pickle","rb") as f:
     physical,grid,depths,shelves = pickle.load(f)
 
+plt.hist(fullmask[grid])
+plt.show()
+print(shelves)
 
 bedvalues = bedmap.bed.values
 
