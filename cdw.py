@@ -310,6 +310,7 @@ def new_closest_WOA(physical,grid,baths,bedmap):
     plt.show()
     
 def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp):
+    print("temp from closest point")
     heats=[np.nan]*len(baths)
     stx = sal.coords["x"].values
     sty = sal.coords["y"].values
@@ -317,8 +318,11 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp):
     print(salvals.shape)
     d  = sal.depth.values
     print(len(d))
+    count = 0
     for l in tqdm(range(len(closest_points))):
+        print(closest_points[l])
         if ~np.isnan(closest_points[l]).any():
+            count+=1
             centroid = [bedmap.coords["x"][closest_points[l][1]],bedmap.coords["y"][closest_points[l][0]]]
             rdist = np.sqrt((sal.coords["x"]- centroid[0])**2 + (sal.coords["y"] - centroid[1])**2)
             closest=np.unravel_index(rdist.argmin(), rdist.shape)
@@ -328,4 +332,5 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp):
             s = salvals[:,closest[0],closest[1]]
             tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
             heats[l]=heat_content((tinterp,sinterp),baths[l],25)
+    print(count/len(closest_points))
     return heats

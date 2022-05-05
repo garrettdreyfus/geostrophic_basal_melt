@@ -40,11 +40,11 @@ def closest_shelf(coord,polygons):
     closestname = None
     closestpolygon = None
     for i, (k, v) in enumerate(polygons.items()):
-        dist = v.distance(Point(coord))
+        dist = v[0].distance(Point(coord))
         if dist < min_dist:
             min_dist = dist
             closestname = k
-            closestpolygon = v
+            closestpolygon = v[0]
     return closestname, closestpolygon, min_dist
 
 
@@ -66,8 +66,8 @@ def get_line_points(shelf,polygons,mode):
     print("Grabbing grounding line points")
     for i in tqdm(range(1,icemask.shape[0]-1)):
         for j in  range(1,icemask.shape[1]-1):
-            if icemask[i][j] == 1:
-                if (icemask[i-1:i+2,j-1:j+2]==0).any():
+            if icemask[i][j] == 1 or np.isnan(icemask[i][j]) :
+                if (icemask[i-1:i+2,j]==0).any() or (icemask[i,j-1:j+2]==0).any():
                     physical_cords.append([shelf.x.values[j],shelf.y.values[i]])
                     cn, _, _ = closest_shelf([shelf.x.values[j],shelf.y.values[i]],polygons)
                     shelves[cn].append([shelf.x.values[j],shelf.y.values[i]])
@@ -75,6 +75,9 @@ def get_line_points(shelf,polygons,mode):
                     depths.append(beddepth[i,j])
     pc = np.asarray(physical_cords)
     plt.scatter(pc.T[0],pc.T[1])
+    for cn in shelves.keys():
+        xy = np.asarray(shelves[cn]).T
+        plt.scatter(xy[0],xy[1])
     plt.show()
     return physical_cords, grid_indexes, depths,shelves
 

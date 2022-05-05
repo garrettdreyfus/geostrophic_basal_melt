@@ -10,16 +10,15 @@ from sklearn.linear_model import LinearRegression
 from matplotlib.path import Path
 import shapely
 from matplotlib.colors import ListedColormap
-
 with open("data/shelfpolygons.pickle","rb") as f:
     polygons = pickle.load(f)
 with open("data/GLIBnew.pickle","rb") as f:
     GLIB = pickle.load(f)
 bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
-# shelfmaskkey={}
-# x, y = np.meshgrid(bedmap.x,bedmap.y)
-# fullmask = np.full_like(bedmap.bed.values,fill_value=0,dtype=int)
-# count=1
+shelfmaskkey={}
+x, y = np.meshgrid(bedmap.x,bedmap.y)
+fullmask = np.full_like(bedmap.bed.values,fill_value=0,dtype=float)
+count=1
 # for k in tqdm(polygons.keys()):
 #     shelfmaskkey[k]=count
 #     polygon,parts = polygons[k]
@@ -31,52 +30,65 @@ bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounde
 #         centroid=np.mean(polygon.exterior.coords.xy,axis=1)
 #         plt.scatter(centroid[0],centroid[1])
 #         for l in range(0,len(parts)-1):
-#             poly_path=Path(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T)
+#             poly_path=shapely.geometry.Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T)
+#             poly_path = poly_path.buffer(5000)
+#             poly_path = Path(np.asarray(poly_path.exterior.coords.xy).T)
 #             mask = poly_path.contains_points(coors)
 #             mask = mask*count
 #             fullmask[firstmask]=np.logical_or(mask,fullmask[firstmask])*count
 #     count=count+1
+# with open("data/groundinglinepoints.pickle","rb") as f:
+#     physical,grid,depths,shelves = pickle.load(f)
+# physical = np.asarray(physical).T
+# fullmask[fullmask==0] = np.nan
+# plt.imshow(bedmap.icemask_grounded_and_shelves.values)
+# plt.imshow(fullmask)
+# #plt.scatter(grid[1],grid[0],c="red")
 # plt.show()
 
-# with open("data/shelfmask.pickle","wb") as f:
-#     pickle.dump([fullmask,shelfmaskkey],f)
+with open("data/shelfmask.pickle","wb") as f:
+    pickle.dump([fullmask,shelfmaskkey],f)
 with open("data/shelfmask.pickle","rb") as f:
     fullmask,shelfmaskkey = pickle.load(f)
-# randomcmap = ListedColormap(np.random.rand ( 256,3))
-# plt.imshow(fullmask,cmap=randomcmap,interpolation=None)
-# plt.show()
-deltaglib = GLIB-bedmap.bed.values
-shelfvolume={}
-fullmask[bedmap.icemask_grounded_and_shelves==0]=0
-print("assembling deltaglib")
-areas={}
-for k in tqdm(polygons.keys()):
-    if np.nansum(fullmask==shelfmaskkey[k])>0:
-        mask = np.logical_and(fullmask==shelfmaskkey[k],bedmap.icemask_grounded_and_shelves!=0)
-        areas[k]=np.nansum(mask)
-        shelfvolume[k]=np.nansum(deltaglib[mask])
-rignot_shelf_massloss,rignot_shelf_areas,sigma = extract_rignot_massloss("data/rignot2019.xlsx")
-print("plotting")
-for k in tqdm(rignot_shelf_massloss.keys()):
-    if k in shelfvolume.keys():
-        plt.scatter(rignot_shelf_massloss[k]/areas[k],shelfvolume[k]/areas[k])
-        plt.text(rignot_shelf_massloss[k]/areas[k],shelfvolume[k]/areas[k],k)
-    else:
-        print(k)
-plt.xlabel("Surface Mass Balance / Ice Shelf Area")
-plt.ylabel("Total Area Under Every GLIB on Shelf / Ice Shelf Area")
-plt.xlim(-1,0.1)
-plt.show()
+randomcmap = ListedColormap(np.random.rand ( 256,3))
+# deltaglib = GLIB-bedmap.bed.values
+# shelfvolume={}
+# fullmask[bedmap.icemask_grounded_and_shelves==0]=0
+# print("assembling deltaglib")
+# areas={}
+# for k in tqdm(polygons.keys()):
+#     if np.nansum(fullmask==shelfmaskkey[k])>0:
+#         mask = np.logical_and(fullmask==shelfmaskkey[k],bedmap.icemask_grounded_and_shelves!=0)
+#         areas[k]=np.nansum(mask)
+#         shelfvolume[k]=np.nansum(deltaglib[mask])
+# rignot_shelf_massloss,rignot_shelf_areas,sigma = extract_rignot_massloss("data/rignot2019.xlsx")
+# print("plotting")
+# for k in tqdm(rignot_shelf_massloss.keys()):
+#     if k in shelfvolume.keys():
+#         plt.scatter(rignot_shelf_massloss[k]/areas[k],shelfvolume[k]/areas[k])
+#         plt.text(rignot_shelf_massloss[k]/areas[k],shelfvolume[k]/areas[k],k)
+#     else:
+#         print(k)
+# plt.xlabel("Surface Mass Balance / Ice Shelf Area")
+# plt.ylabel("Total Area Under Every GLIB on Shelf / Ice Shelf Area")
+# plt.xlim(-1,0.1)
+#plt.show()
 # physical, grid, depths, shelves = get_line_points(bedmap,polygons,"gl")
+# # grid = np.asarray(grid).T
+# # #plt.imshow(bedmap.icemask_grounded_and_shelves.values)
 
 # with open("data/groundinglinepoints.pickle","wb") as f:
 #     pickle.dump([physical,grid,depths,shelves],f)
 with open("data/groundinglinepoints.pickle","rb") as f:
     physical,grid,depths,shelves = pickle.load(f)
-
-plt.hist(fullmask[grid])
+#plt.imshow(fullmask,cmap=randomcmap,interpolation=None)
+#plt.scatter(grid[0],grid[1],c="r")
+for cn in shelves.keys():
+    xy = np.asarray(shelves[cn]).T
+    plt.scatter(xy[0],xy[1])
 plt.show()
 print(shelves)
+
 
 bedvalues = bedmap.bed.values
 
@@ -91,21 +103,22 @@ with open("data/cdw_closest.pickle","rb") as f:
     closest_points = pickle.load(f)
 
 
-# glibheats =  tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp)
-# bedvalues = bedmap.bed.values
+glibheats =  tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp)
+bedvalues = bedmap.bed.values
 
-# baths = []
-# for l in range(len(grid)):
-#     baths.append(bedvalues[grid[l][1]][grid[l][0]])
-# noglibheats =  tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp)
+baths = []
+for l in range(len(grid)):
+    baths.append(bedvalues[grid[l][1]][grid[l][0]])
+noglibheats =  tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp)
 
-# with open("data/newheats.pickle","wb") as f:
-#     pickle.dump([noglibheats,glibheats],f)
+with open("data/newheats.pickle","wb") as f:
+    pickle.dump([noglibheats,glibheats],f)
 with open("data/newheats.pickle","rb") as f:
     noglibheats,glibheats = pickle.load(f)
 
 fig, (ax1,ax2) = plt.subplots(1,2)
 physical = np.asarray(physical).T
+print(physical.shape,len(noglibheats))
 ax1.scatter(physical[0],physical[1],c=noglibheats,cmap="jet",vmin=0,vmax=200)
 c= ax2.scatter(physical[0],physical[1],c=glibheats,cmap="jet",vmin=0,vmax=200)
 plt.colorbar(c)
@@ -171,10 +184,9 @@ plt.show()
 #jplt.imshow(np.logical_and(bedvalues<-1300,np.isnan(bedmap.icemask_grounded_and_shelves.values)))
 #plt.show()
 # #
-# physical, grid, depths, is_points = get_line_points(bedmap,polygons,"is")
-
-# with open("data/ispoints.pickle","wb") as f:
-#    pickle.dump([physical,grid,depths,is_points],f)
+#physical, grid, depths, is_points = get_line_points(bedmap,polygons,"is")
+#with open("data/ispoints.pickle","wb") as f:
+   #pickle.dump([physical,grid,depths,is_points],f)
 with open("data/ispoints.pickle","rb") as f:
    [p,g,d,is_points] = pickle.load(f)
 
