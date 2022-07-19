@@ -66,7 +66,7 @@ def get_line_points(shelf,polygons,mode):
     print("Grabbing grounding line points")
     for i in tqdm(range(1,icemask.shape[0]-1)):
         for j in  range(1,icemask.shape[1]-1):
-            if icemask[i][j] == 1 or np.isnan(icemask[i][j]) :
+            if icemask[i][j] == 1:
                 if (icemask[i-1:i+2,j]==0).any() or (icemask[i,j-1:j+2]==0).any():
                     physical_cords.append([shelf.x.values[j],shelf.y.values[i]])
                     cn, _, _ = closest_shelf([shelf.x.values[j],shelf.y.values[i]],polygons)
