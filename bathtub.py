@@ -10,6 +10,7 @@ from tqdm import tqdm
 from shapely.geometry import Polygon, Point
 import time
 from scipy.ndimage import label 
+from scipy.ndimage import binary_dilation as bd
 import xarray as xr
 
 
@@ -36,7 +37,7 @@ def save_polygons():
         pickle.dump(polygons,f)
 
 def closest_shelf(coord,polygons):
-    min_dist = np.inf
+    min_dist = 1000
     closestname = None
     closestpolygon = None
     for i, (k, v) in enumerate(polygons.items()):
@@ -48,7 +49,7 @@ def closest_shelf(coord,polygons):
     return closestname, closestpolygon, min_dist
 
 
-def get_line_points(shelf,polygons,mode):
+def get_line_points(shelf,polygons,debug=False):
     margin_coords = []
     mx = []
     my = []
@@ -64,22 +65,29 @@ def get_line_points(shelf,polygons,mode):
     for k in polygons.keys():
         shelves[k] = []
     print("Grabbing grounding line points")
+
+    iceexpand = bd(icemask==0)
+    glline = np.logical_and(iceexpand==1,icemask!=0)
+    shelf_keys = []
+
     for i in tqdm(range(1,icemask.shape[0]-1)):
         for j in  range(1,icemask.shape[1]-1):
-            if icemask[i][j] == 1:
-                if (icemask[i-1:i+2,j]==0).any() or (icemask[i,j-1:j+2]==0).any():
-                    physical_cords.append([shelf.x.values[j],shelf.y.values[i]])
-                    cn, _, _ = closest_shelf([shelf.x.values[j],shelf.y.values[i]],polygons)
+            if glline[i][j]:
+                physical_cords.append([shelf.x.values[j],shelf.y.values[i]])
+                cn, _, _ = closest_shelf([shelf.x.values[j],shelf.y.values[i]],polygons)
+                if cn:
                     shelves[cn].append([shelf.x.values[j],shelf.y.values[i]])
-                    grid_indexes.append([j,i])
-                    depths.append(beddepth[i,j])
+                shelf_keys.append(cn)
+                grid_indexes.append([i,j])
+                depths.append(beddepth[i,j])
     pc = np.asarray(physical_cords)
-    plt.scatter(pc.T[0],pc.T[1])
-    for cn in shelves.keys():
-        xy = np.asarray(shelves[cn]).T
-        plt.scatter(xy[0],xy[1])
-    plt.show()
-    return physical_cords, grid_indexes, depths,shelves
+    if debug:
+        plt.scatter(pc.T[0],pc.T[1])
+        for cn in shelves.keys():
+            xy = np.asarray(shelves[cn]).T
+            plt.scatter(xy[0],xy[1])
+        plt.show()
+    return physical_cords, grid_indexes, depths,shelves,shelf_keys
 
 
 def trimDataset(bm,xbounds,ybounds):
@@ -109,5 +117,16 @@ def convert_bedmachine(fname,coarsenfact=2):
     bedmach = bedmach.coarsen(x=coarsenfact,y=coarsenfact, boundary="trim").mean()
     bedmach.icemask_grounded_and_shelves.values[np.logical_and(bedmach.icemask_grounded_and_shelves.values<1,bedmach.icemask_grounded_and_shelves.values>0)] = 1
     return bedmach
+
+def shelf_sort(shelf_keys,quant):
+    shelf_dict = {}
+    for l in range(len(shelf_keys)):
+        k = shelf_keys[l]
+        if k:
+            if k not in shelf_dict:
+                shelf_dict[k]=[]
+            shelf_dict[k].append(quant[l])
+    return shelf_dict
+
  
 

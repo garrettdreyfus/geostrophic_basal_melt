@@ -315,12 +315,9 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp):
     stx = sal.coords["x"].values
     sty = sal.coords["y"].values
     salvals,tempvals = sal.s_an.values[0,:,:,:],temp.t_an.values[0,:,:,:]
-    print(salvals.shape)
     d  = sal.depth.values
-    print(len(d))
     count = 0
     for l in tqdm(range(len(closest_points))):
-        print(closest_points[l])
         if ~np.isnan(closest_points[l]).any():
             count+=1
             centroid = [bedmap.coords["x"][closest_points[l][1]],bedmap.coords["y"][closest_points[l][0]]]
