@@ -14,7 +14,7 @@ writeGLIB = False
 writePolygons = False
 writeGL = False
 createWOA = False
-createClosestWOA = True
+createClosestWOA = False
 
 ###############################################
 if writeBedMach:
@@ -43,6 +43,7 @@ if writeGLIB:
 with open("data/bedmachGLIB.pickle","rb") as f:
     GLIB = pickle.load(f)
 
+
 ##################################################
 
 ##################################################
@@ -64,6 +65,16 @@ if writeGL:
 
 with open("data/groundinglinepoints.pickle","rb") as f:
     physical,grid,depths,shelves,shelf_keys = pickle.load(f)
+
+randomcmap = ListedColormap(np.random.rand ( 256,3))
+plt.imshow(GLIB,cmap=randomcmap)
+grid = np.asarray(grid)
+print(grid.shape)
+shelf_keys =np.asarray(shelf_keys)
+plt.scatter(grid[shelf_keys=="Frost"][1],grid[shelf_keys=="Frost"][0],c="red",s=100)
+plt.scatter(grid.T[1][shelf_keys=="Frost"],grid.T[0][shelf_keys=="Frost"],c="red",s=100)
+plt.show()
+
 
 ################################################
 
@@ -89,3 +100,43 @@ if createClosestWOA:
     closest_points = cdw.closest_WOA_points(grid,baths,bedmach)
     with open("data/closest_points.pickle","wb") as f:
         pickle.dump(closest_points,f)
+with open("data/closest_points.pickle","rb") as f:
+    closest_points = pickle.load(f)
+
+
+depths = []
+glibs = []
+for l in range(len(baths)):
+    depths.append(bedvalues[grid[l][0],grid[l][1]])
+    glibs.append(baths[l])
+    if np.isnan(baths[l]):
+        baths[l]=bedvalues[grid[l][0],grid[l][1]]
+
+glibheats =  cdw.tempFromClosestPoint(bedmach,grid,physical,baths,closest_points,sal,temp)
+physical = np.asarray(physical)
+slopes_by_shelf = bt.shelf_sort(shelf_keys,glibheats)
+gldepths_by_shelf = bt.shelf_sort(shelf_keys,depths)
+glibs_by_shelf = bt.shelf_sort(shelf_keys,glibs)
+rignot_shelf_massloss,rignot_shelf_areas,sigma = cdw.extract_rignot_massloss("data/rignot2019.xlsx")
+
+xs=[]
+ys = []
+zs = []
+znews= [] 
+for k in slopes_by_shelf.keys():
+    if k in rignot_shelf_massloss:
+        x = np.nanmean(slopes_by_shelf[k])
+        z = np.nanmean(gldepths_by_shelf[k])
+        c = rignot_shelf_massloss[k]/len(slopes_by_shelf[k])#/rignot_shelf_areas[k]
+        xs.append(x)
+        ys.append(c)
+        zs.append(z)
+        znews.append(np.nanmean(glibs_by_shelf[k]))
+        plt.annotate(k,(c,x))
+
+plt.xlabel("Average degrees C above freezing within 200m above HUB")
+plt.ylabel("Rignot 2019 massloss divided by grounding line length")
+plt.scatter(ys,xs,c=znews,cmap="jet")
+plt.colorbar()
+plt.show()
+

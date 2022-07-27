@@ -20,150 +20,22 @@ import skfmm
 from matplotlib import collections  as mc
 from functools import partial
 from tqdm.contrib.concurrent import process_map
-
-
-
-def create_depth_mask(da,d,limit):
-    depthmask = np.full_like(da[0,0,:,:].values,np.nan,dtype=bool)
-    for i in range(depthmask.shape[0]):
-        for j in range(depthmask.shape[1]):
-            if ~(np.isnan(da.values[0,:,i,j])).all():
-                depthmask[i,j] = (d[~np.isnan(da.values[0,:,i,j])][-1]>limit)
-    return depthmask
-
-def shelf_average_profile(shelfpolygon,shelfpoints,sal,temp):
-    d  = sal.depth.values
-    sp = np.asarray(shelfpoints).T
-    centroid = np.nanmean(sp,axis=1)
-    print(centroid)
-    angle = np.degrees(np.arctan2(centroid[1],centroid[0]))
-    rdist = np.sqrt((sal.coords["x"]- centroid[0])**2 + (sal.coords["y"] - centroid[1])**2)
-    angles = np.degrees(np.arctan2(sal.coords["y"],sal.coords["x"]))
-    aslice = np.abs((angles-angle))<20
-    lons,lats = np.meshgrid(sal.lon,sal.lat)
-    #mask = np.logical_and(np.logical_and(sal.bed.values>-1000, np.isnan(sal.icemask)),rdist<500*10**3)
-    #not as nice with less than -1000
-    mask = np.logical_and(np.isnan(sal.icemask.values),sal.bed.values<-2000)
-    #mask = rdist<1000*10**3
-    # greater than -1000 good
-    # no ice is better than ice
-    #mask = np.logical_and(np.logical_and(sal.bed.values>-1000,np.isnan(sal.icemask.values)),rdist<1000*10**3)
-    #mask = np.logical_and.reduce(np.asarray((sal.bed.values<-1000,sal.bed.values>-1100,np.isnan(sal.icemask.values)),rdist<1000*10**3))
-    #mask = np.logical_and(np.isnan(sal.icemask.values),rdist<1000*10**3)
-    #mask = np.logical_and(np.isnan(sal.icemask.values),rdist<1000*10**3)
-    #mask = rdist<1000*10**3
-    # plt.imshow(mask)
-    # plt.show()
-    #mask = np.logical_and(aslice,rdist<1000*10**3)
-    #mask = np.logical_and(mask,sal.bed.values>-1000)
-    #mask = np.logical_and(aslice,sal.bed.values<0)
-    #mask = np.logical_and(rdist<1000*10**3,sal.bed.values>-1000)
-    #mask = rdist<1000*10**3
-    #mask = rdist>0
-    xs,ys = sal.x.values[mask],sal.y.values[mask]
-    # plt.scatter(sal.x.values.flatten(),sal.y.values.flatten(),c=sal.bed.values.flatten())
-    # plt.scatter(xs,ys)
-    # plt.colorbar()
-    # plt.show()
-    salvals,tempvals = sal.s_an.values[0,:,:,:],temp.t_an.values[0,:,:,:]
-    salvals,tempvals = np.moveaxis(salvals,0,-1),np.moveaxis(tempvals,0,-1)
-    average_s_profiles = []
-    average_t_profiles = []
-    coords = []
-    for i in shelfpoints:
-        coord = np.argmin((xs-i[0])**2 + (ys-i[1])**2)
-        coords.append(coord)
-        s = gsw.SA_from_SP(salvals[mask][coord][:],d,lons[mask][coord],lats[mask][coord])
-        #s = salvals[mask][coord][:]
-        #t = tempvals[mask][coord][:]
-        t = gsw.CT_from_t(s,tempvals[mask][coord][:],d)
-        #print("part?")
-        average_s_profiles.append(s)
-        average_t_profiles.append(t)
-    # average_s_profiles = salvals[mask]
-    # average_t_profiles = tempvals[mask]
-    shelfpoints = np.asarray(shelfpoints).T
-    coords = np.asarray(coords).T
-    # plt.scatter(xs,ys)
-    # plt.scatter(shelfpoints[0],shelfpoints[1],)
-    # plt.scatter(xs[coords[0]],ys[coords[1]])
-    # plt.show()
-    average_s_profiles = np.asarray(average_s_profiles)
-    average_s = np.nanmean(average_s_profiles,axis=0)
-    average_t_profiles = np.asarray(average_t_profiles)
-    average_t = np.nanmean(average_t_profiles,axis=0)
-
-    return mask, average_t, average_s,d
-
-def generate_shelf_profiles(woafname,is_points,polygons):
-    with open("data/woawithbed.pickle","rb") as f:
-        sal,temp = pickle.load(f)
-    shelf_profiles = {}
-    for shelfname in tqdm(polygons.keys()):
-        if len(is_points[shelfname]):
-            print(shelfname)
-            _,average_t, average_s,d = shelf_average_profile(polygons[shelfname],is_points[shelfname],sal,temp)
-            shelf_profiles[shelfname] = (average_t,average_s,d)
-
-    shelf_profile_heat_functions = {}
-    for k in shelf_profiles.keys():
-        t,s,d = shelf_profiles[k] 
-        shelf_profile_heat_functions[k] = (interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s)))
-
-    return shelf_profiles, shelf_profile_heat_functions
-
-def cdw_interface_depth(shelf_profiles):
-    interface_depths = {}
-    for k in shelf_profiles.keys():
-        depths = shelf_profiles[k][2]
-        newdepths = range(int(np.nanmin(depths)),int(np.nanmax(depths)))
-        ct = np.interp(newdepths,shelf_profiles[k][2],shelf_profiles[k][0])
-        sa = np.interp(newdepths,shelf_profiles[k][2],shelf_profiles[k][1])
-        pot_dens = gsw.sigma0(sa,ct)+1000
-        pt = gsw.pt_from_CT(sa,ct)
-        interface_i = int(np.nanargmax(pt)/2)
-        nsquared = gsw.Nsquared(sa,ct,newdepths,-70)
-        pmid = nsquared[1]
-        p_i = np.where(pmid>20)[0][0]
-        drho = (np.nanmean(pot_dens[0:interface_i])-np.nanmean(pot_dens[interface_i:interface_i*2]))/((newdepths[interface_i*2]-newdepths[0])/2)#(np.nanmean(pot_dens[0:interface_i*2]))
-        gprime = -(9.8*drho)/1025.0
-        #plt.plot(nsquared[0],nsquared[1])
-        #plt.show()
-        nsquared = nsquared[0]
-        nsquared = np.nanmedian(nsquared[p_i:interface_i*2])
-        nsquared = gprime
-        interface_depths[k] = (newdepths[np.nanargmax(pt)]/2,gprime,nsquared)
-    return interface_depths
-
-def ice_boundary_in_bathtub(bathtubs,icemask):
-    ice_boundary_points = []
-    mapmask = np.full_like(icemask,np.nan,dtype=float)
-    for bathtub in tqdm(bathtubs):
-        count = 0
-        for k in range(len(bathtub[0])):
-            i,j = bathtub[0][k],bathtub[1][k]
-            a = icemask[i+1][j]
-            b = icemask[i-1][j]
-            c = icemask[i][j+1]
-            d = icemask[i][j-1]
-            if np.isnan(icemask[i,j]) and (np.asarray([a,b,c,d])==1).any():
-                count+=1
-        ice_boundary_points.append(count)
-        mapmask[bathtub]=count
-    return ice_boundary_points
+from scipy.ndimage import binary_dilation as bd
+from scipy.ndimage import label 
 
 def heat_content(heat_function,depth,plusminus):
     #heat = gsw.cp_t_exact(s,t,d)
     depth = np.abs(depth)
     #xnew= np.arange(50,min(depth+0,5000))
-    xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,5000))
+    #xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,5000))
+    xnew= np.arange(max(0,depth-200),depth)
     #print(xnew,depth,max(d))
     ynew = heat_function[0](xnew)
     #xnew,ynew = xnew[ynew>0],ynew[ynew>0]
     ynew = ynew - gsw.CT_freezing(heat_function[1](xnew),xnew,0)
     #return np.nansum(ynew>1.2)/np.sum(~np.isnan(ynew))
     if len(ynew)>0:
-        return np.trapz(ynew,xnew)
+        return np.trapz(ynew,xnew)/len(xnew)
     else:
         return np.nan
     #return np.trapz(ynew,xnew)-np.dot(np.diff(xnew),gsw.CT_freezing(heat_function[1]((xnew[:-1]+xnew[1:])/2),(xnew[:-1]+xnew[1:])/2,0))
@@ -236,79 +108,68 @@ def extract_rignot_massloss(fname):
 # with open("data/polynainterp.pickle","wb") as f:
 #     pickle.dump(polyna,f)
 
-def pfun(physical,grid,depth,iceanddepth,baths,bordermask,l):
-    try:
-        iso_z=baths[l]+5
-        if ~np.isnan(iso_z):
-            below = np.logical_and((depth<=iso_z),iceanddepth)
-            square_mask=np.zeros_like(below)
-            square_mask[max(0,grid[l][1]-1500):min(grid[l][1]+1500,square_mask.shape[0]),max(0,grid[l][0]-1500):min(grid[l][0]+1500,square_mask.shape[1])]=1
-            below = np.logical_and(below,square_mask)
-            below = np.logical_and(below,depth>-2010)
-            seed = np.ones_like(below,dtype=float)
-            seed[grid[l][1],grid[l][0]] = -1
-            m = np.ma.MaskedArray(seed,~below)
-            # plt.imshow(bordermask)
-            # plt.imshow(m)
-            # plt.scatter(grid[l][0],grid[l][1],c='red')
-            # plt.show()
-            z = skfmm.distance(m)
-            # plt.imshow(z)
-            # plt.show()
-            z.mask[~bordermask] = 1
-            z.set_fill_value(np.inf)
-            return np.unravel_index(z.argmin(), z.shape)
-        return np.nan
-    except Exception as e:
-        print(e)
-        return np.nan
+
+def closest_point_pfun(grid,bedvalues,icemask,bordermask,baths,l):
+    bath = baths[l]
+    if np.isnan(bath):
+        bath = bedvalues[grid[l][0],grid[l][1]]
+    search = np.full_like(bedvalues,0)
+    search[:]=0
+    search[grid[l][0],grid[l][1]]=1
+    route = np.logical_and(bedvalues<(bath+20),icemask!=0)
+    searchsum=0
+    if np.sum(np.logical_and(route,bordermask))>0:
+        intersection = [[],[]]
+        iters = 0
+        while len(intersection[0])==0:
+            iters+=20
+            search = bd(search,mask=route,iterations=50)
+            searchsumnew = np.sum(search)
+            if searchsum !=searchsumnew:
+                searchsum = searchsumnew
+            else:
+                return (np.nan,np.nan)
+            intersection = np.where(np.logical_and(search,bordermask))
+        return (intersection[0][0],intersection[1][0])
+    else:
+        return (np.nan,np.nan)
 
 
-def new_closest_WOA(physical,grid,baths,bedmap):
-    depth = np.asarray(bedmap.bed.values)
-    depthmask = depth>-2300
-    ice = np.asarray(bedmap.icemask_grounded_and_shelves.values)
+def closest_WOA_points(grid,baths,bedmach,debug=False):
+    bedvalues = bedmach.bed.values
+    icemask = bedmach.icemask_grounded_and_shelves.values
     closest_points=[np.nan]*len(baths)
-    print(np.sum(~np.isnan(baths)))
-    iceanddepth = np.logical_and(ice!=0,depthmask)
-    #for l in tqdm(range(len(solution))):
-    insidedepthmask = depth<-1900
+    depthmask = bedvalues>-2300
+    insidedepthmask = bedvalues<-1900
     bordermask = np.logical_and(insidedepthmask,depthmask)
-    bordermask = np.logical_and(bordermask,np.isnan(ice))
-    #bordermask = np.logical_and(bordermask,np.isnan(ice))
-    #pool = multiprocessing.Pool(10)
-    f = partial(pfun,physical,grid,depth,iceanddepth,baths,bordermask)
+    bordermask = np.logical_and(bordermask,np.isnan(icemask))
+    itertrack = []
+
+    f = partial(closest_point_pfun,grid,bedvalues,icemask,bordermask,baths)
     #print(pool.map(f, range(len(grid))))
     #closest_points = pool.map(f, range(10)))
-    closest_points = process_map(f, range(len(grid)),max_workers=11,chunksize=1000)
+    closest_points = process_map(f, range(int(len(grid))),max_workers=6,chunksize=1000)
+
     try:
         pool.close()
     except Exception as e:
         print(e)
 
-    # for l in tqdm(range(5)):
-    #     try:
-    #         pfun(physical,grid,depth,iceanddepth,baths,bordermask,l,closest_points)
-    #     except Exception as e:
-    #         print(e)
-    #         print("problem")
-    with open("data/cdw_closest.pickle","wb") as f:
-        pickle.dump(closest_points,f)
-    with open("data/cdw_closest.pickle","rb") as f:
-        closest_points = pickle.load(f)
-    #plt.imshow(depth)
-    lines = []
-    for l in tqdm(range(len(closest_points))):
-        if ~np.isnan(closest_points[l]).any():
-            if closest_points[l][0]==0 and closest_points[l][1]==0:
-                print(l)
-            lines.append(([grid[l][0],grid[l][1]],[closest_points[l][1],closest_points[l][0]]))
-    lc = mc.LineCollection(lines, colors="red", linewidths=2)
-    fig, ax = plt.subplots()
-    ax.imshow(depth)
-    ax.add_collection(lc)
-    plt.show()
-    
+    if debug:
+        lines = []
+        plt.hist(itertrack)
+        for l in tqdm(range(int(len(closest_points)))):
+            if ~np.isnan(closest_points[l]).any():
+                if closest_points[l][0]==0 and closest_points[l][1]==0:
+                    print(l)
+                lines.append(([grid[l][1],grid[l][0]],[closest_points[l][1],closest_points[l][0]]))
+        lc = mc.LineCollection(lines, colors="red", linewidths=2)
+        fig, ax = plt.subplots()
+        ax.imshow(bedvalues)
+        ax.add_collection(lc)
+        plt.show()
+    return closest_points
+
 def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp):
     print("temp from closest point")
     heats=[np.nan]*len(baths)
@@ -317,17 +178,29 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp):
     salvals,tempvals = sal.s_an.values[0,:,:,:],temp.t_an.values[0,:,:,:]
     d  = sal.depth.values
     count = 0
+    lines = []
     for l in tqdm(range(len(closest_points))):
         if ~np.isnan(closest_points[l]).any():
             count+=1
-            centroid = [bedmap.coords["x"][closest_points[l][1]],bedmap.coords["y"][closest_points[l][0]]]
+            centroid = [bedmap.coords["x"].values[closest_points[l][1]],bedmap.coords["y"].values[closest_points[l][0]]]
             rdist = np.sqrt((sal.coords["x"]- centroid[0])**2 + (sal.coords["y"] - centroid[1])**2)
             closest=np.unravel_index(rdist.argmin(), rdist.shape)
             x = stx[closest[0],closest[1]]
             y = sty[closest[0],closest[1]]
             t = tempvals[:,closest[0],closest[1]]
             s = salvals[:,closest[0],closest[1]]
+            line = ([x,y],[centroid[0],centroid[1]])
+            if ~(np.isnan(line).any()):
+                lines.append(line)
             tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
-            heats[l]=heat_content((tinterp,sinterp),baths[l],25)
+            heats[l]=heat_content((tinterp,sinterp),baths[l],100)
     print(count/len(closest_points))
+    print(lines)
+    fig, ax = plt.subplots()
+    lc = mc.LineCollection(lines, colors="red", linewidths=2)
+    #ax.imshow(bedvalues)
+    plt.xlim(-10**6,10**6)
+    plt.ylim(-10**6,10**6)
+    ax.add_collection(lc)
+    plt.show()
     return heats

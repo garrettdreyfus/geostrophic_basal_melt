@@ -28,7 +28,6 @@ def save_polygons():
         kind = records[i].record[3]
         output = []
         if l.shapeTypeName == 'POLYGON' and kind== "FL":
-            print(l.parts)
             xs, ys = zip(*l.points)
             polygons[name] = [Polygon(l.points),l.parts]
             plt.annotate(name,(np.mean(xs),np.mean(ys)))
@@ -98,14 +97,7 @@ def trimDataset(bm,xbounds,ybounds):
     shelf = shelf.where(shelf.y>ybounds[0],drop=True)
     return shelf
 
-def shelf_distance_mask(ds,shelf,polygons):
-    ice = ds.icemask_grounded_and_shelves.values
-    bed = ds.bed.values
-    #mask = np.full_like(ice,1,dtype=bool)
-    mask = ~np.logical_and(np.isnan(ice),bed<-3000)
-    return mask
-
-def convert_bedmachine(fname,coarsenfact=2):
+def convert_bedmachine(fname,coarsenfact=4):
     bedmach = xr.open_dataset(fname)
     mask = bedmach.mask.values
     newmask = np.full_like(mask,np.nan,dtype=np.float64)
