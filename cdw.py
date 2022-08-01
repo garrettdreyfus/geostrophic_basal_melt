@@ -170,7 +170,11 @@ def closest_WOA_points(grid,baths,bedmach,debug=False):
         plt.show()
     return closest_points
 
-def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp):
+def running_mean(x, N):
+    cumsum = np.nancumsum(np.insert(x, 0, 0)) 
+    return (cumsum[N:] - cumsum[:-N]) / float(N)
+
+def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,debug=False,method="default"):
     print("temp from closest point")
     heats=[np.nan]*len(baths)
     stx = sal.coords["x"].values
@@ -179,6 +183,7 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp):
     d  = sal.depth.values
     count = 0
     lines = []
+    bedvalues = bedmap.bed.values
     for l in tqdm(range(len(closest_points))):
         if ~np.isnan(closest_points[l]).any():
             count+=1
@@ -193,14 +198,48 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp):
             if ~(np.isnan(line).any()):
                 lines.append(line)
             tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
-            heats[l]=heat_content((tinterp,sinterp),baths[l],100)
-    print(count/len(closest_points))
-    print(lines)
-    fig, ax = plt.subplots()
-    lc = mc.LineCollection(lines, colors="red", linewidths=2)
-    #ax.imshow(bedvalues)
-    plt.xlim(-10**6,10**6)
-    plt.ylim(-10**6,10**6)
-    ax.add_collection(lc)
-    plt.show()
+            # plt.scatter(t,d)
+            # plt.plot(tinterp(d),d)
+            # print(tinterp(d))
+            # plt.show()
+            if method=="default":
+                if np.isnan(t[11:]).all():
+                    heats[l]=np.nan
+                elif np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
+                    heats[l]=heat_content((tinterp,sinterp),baths[l],100)
+            elif method=="a":
+                zglib = baths[l]
+                zgl = bedvalues[grid[l][0],grid[l][1]]
+                closest_t = t[11:][np.nanargmin(np.abs(d[11:]+zglib))]
+                if ~np.isnan(t[11:]).all():
+                    diff_t = running_mean(np.diff(t[11:]),3)
+                    cline = d[11:][np.nanargmax(diff_t)]
+                    zpyc = d[11:][np.nanargmax(t[11:])]
+                    n2,_ = gsw.Nsquared(s[11:],t[11:],d[11:])
+                    n2 = np.asarray(n2)
+                    if np.sum(t[11:]>0)>0:
+                        #print(t[11:]>0)
+                        z0 = np.nanmin(d[11:][t[11:]>0])
+                    else:
+                        z0=np.nanmin(d[11:])
+                    if zpyc>zglib and zglib > zgl:
+                        #q = (z0-zglib)*(z0-zgl)
+                        q = (z0-zglib)#*zglib
+                        heats[l]=abs(zglib)-abs(zpyc)
+                        heats[l]=(-z0-zglib)*(zglib-zgl)
+                        #heats[l] = (zglib-zgl)*(z0-zglib)*n2[d[11:-1]==z0][0]
+                        #heats[l]=n2[d[11:-1]==z0]*q
+                    else:
+                        heats[l]=np.nan
+                else:
+                    heats[l]=np.nan
+
+    if debug:
+        fig, ax = plt.subplots()
+        lc = mc.LineCollection(lines, colors="red", linewidths=2)
+        #ax.imshow(bedvalues)
+        plt.xlim(-10**6,10**6)
+        plt.ylim(-10**6,10**6)
+        ax.add_collection(lc)
+        plt.show()
     return heats

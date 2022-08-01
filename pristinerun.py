@@ -66,14 +66,14 @@ if writeGL:
 with open("data/groundinglinepoints.pickle","rb") as f:
     physical,grid,depths,shelves,shelf_keys = pickle.load(f)
 
-randomcmap = ListedColormap(np.random.rand ( 256,3))
-plt.imshow(GLIB,cmap=randomcmap)
-grid = np.asarray(grid)
-print(grid.shape)
-shelf_keys =np.asarray(shelf_keys)
-plt.scatter(grid[shelf_keys=="Frost"][1],grid[shelf_keys=="Frost"][0],c="red",s=100)
-plt.scatter(grid.T[1][shelf_keys=="Frost"],grid.T[0][shelf_keys=="Frost"],c="red",s=100)
-plt.show()
+# randomcmap = ListedColormap(np.random.rand ( 256,3))
+# plt.imshow(GLIB,cmap=randomcmap)
+# grid = np.asarray(grid)
+# print(grid.shape)
+# shelf_keys =np.asarray(shelf_keys)
+# plt.scatter(grid[shelf_keys=="Frost"][1],grid[shelf_keys=="Frost"][0],c="red",s=100)
+# plt.scatter(grid.T[1][shelf_keys=="Frost"],grid.T[0][shelf_keys=="Frost"],c="red",s=100)
+# plt.show()
 
 
 ################################################
@@ -112,7 +112,7 @@ for l in range(len(baths)):
     if np.isnan(baths[l]):
         baths[l]=bedvalues[grid[l][0],grid[l][1]]
 
-glibheats =  cdw.tempFromClosestPoint(bedmach,grid,physical,baths,closest_points,sal,temp)
+glibheats =  cdw.tempFromClosestPoint(bedmach,grid,physical,baths,closest_points,sal,temp,method="a")
 physical = np.asarray(physical)
 slopes_by_shelf = bt.shelf_sort(shelf_keys,glibheats)
 gldepths_by_shelf = bt.shelf_sort(shelf_keys,depths)
@@ -132,11 +132,11 @@ for k in slopes_by_shelf.keys():
         ys.append(c)
         zs.append(z)
         znews.append(np.nanmean(glibs_by_shelf[k]))
-        plt.annotate(k,(c,x))
+        plt.annotate(k,(x,c))
 
 plt.xlabel("Average degrees C above freezing within 200m above HUB")
 plt.ylabel("Rignot 2019 massloss divided by grounding line length")
-plt.scatter(ys,xs,c=znews,cmap="jet")
+plt.scatter(xs,ys,c=znews,cmap="jet")
 plt.colorbar()
 plt.show()
 
