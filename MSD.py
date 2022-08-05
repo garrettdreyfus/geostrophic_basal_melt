@@ -26,17 +26,18 @@ def calcMSD(depth,ice,slice_depth,points_of_interest,resolution=5,debug=False):
 
     ## We're going to need to move the points of interest
     ## this is the drawstring bag approach of course
+    points_of_interest = np.asarray(points_of_interest)
     moving_poi=copy.deepcopy(points_of_interest)
 
     ## Here's where we'll store actual results
-    MSD = glpoints.shape[0]*[np.nan]
+    MSD = points_of_interest.shape[0]*[np.nan]
 
     ## And let's make sure to count how many points are even eligible for finding the MSD
     ## They are eligible if the points are actually above bed rock at this depth.
     count = 0
     valid_poi = []
     for l in range(len(MSD)):
-        if depth[glpoints[l][0],glpoints[l][1]]<slice_depth:
+        if depth[points_of_interest[l][0],points_of_interest[l][1]]<slice_depth:
             count+=1
             valid_poi.append(True)
         else:

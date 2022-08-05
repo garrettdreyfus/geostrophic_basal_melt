@@ -99,11 +99,16 @@ def trimDataset(bm,xbounds,ybounds):
 
 def convert_bedmachine(fname,coarsenfact=4):
     bedmach = xr.open_dataset(fname)
+    plt.imshow(bedmach.bed.values,vmin=-600,vmax=-200)
+
     mask = bedmach.mask.values
     newmask = np.full_like(mask,np.nan,dtype=np.float64)
     newmask[mask==0] = np.nan
     newmask[np.logical_or(mask==1,mask==2,mask==4)] = 0
     newmask[mask==3] = 1
+
+    plt.imshow(newmask)
+    plt.show()
     bedmach["icemask_grounded_and_shelves"] = bedmach.mask
     bedmach.icemask_grounded_and_shelves.values=newmask
     bedmach = bedmach.coarsen(x=coarsenfact,y=coarsenfact, boundary="trim").mean()

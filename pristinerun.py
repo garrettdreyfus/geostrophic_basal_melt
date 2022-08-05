@@ -112,17 +112,23 @@ for l in range(len(baths)):
     if np.isnan(baths[l]):
         baths[l]=bedvalues[grid[l][0],grid[l][1]]
 
-glibheats =  cdw.tempFromClosestPoint(bedmach,grid,physical,baths,closest_points,sal,temp,method="a")
+glibheats =  cdw.tempFromClosestPoint(bedmach,grid,physical,baths,closest_points,sal,temp)
 physical = np.asarray(physical)
 slopes_by_shelf = bt.shelf_sort(shelf_keys,glibheats)
 gldepths_by_shelf = bt.shelf_sort(shelf_keys,depths)
 glibs_by_shelf = bt.shelf_sort(shelf_keys,glibs)
 rignot_shelf_massloss,rignot_shelf_areas,sigma = cdw.extract_rignot_massloss("data/rignot2019.xlsx")
 
+with open("data/shelf_massloss.pickle","wb") as f:
+    pickle.dump(slopes_by_shelf,f)
+
 xs=[]
 ys = []
 zs = []
 znews= [] 
+
+with open("data/MSDS.pickle","rb") as f:
+    MSDS = pickle.load(f)
 for k in slopes_by_shelf.keys():
     if k in rignot_shelf_massloss:
         x = np.nanmean(slopes_by_shelf[k])

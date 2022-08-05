@@ -195,6 +195,7 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,debu
             t = tempvals[:,closest[0],closest[1]]
             s = salvals[:,closest[0],closest[1]]
             line = ([x,y],[centroid[0],centroid[1]])
+            dist = np.sqrt((physical[l][0]-x)**2 + (physical[l][1]-y)**2)
             if ~(np.isnan(line).any()):
                 lines.append(line)
             tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
@@ -214,19 +215,24 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,debu
                 if ~np.isnan(t[11:]).all():
                     diff_t = running_mean(np.diff(t[11:]),3)
                     cline = d[11:][np.nanargmax(diff_t)]
+                    #tmax = np.nanmax(t[11:])
+                    tmax=0
                     zpyc = d[11:][np.nanargmax(t[11:])]
                     n2,_ = gsw.Nsquared(s[11:],t[11:],d[11:])
                     n2 = np.asarray(n2)
+                    #print(tmax/2)
                     if np.sum(t[11:]>0)>0:
                         #print(t[11:]>0)
                         z0 = np.nanmin(d[11:][t[11:]>0])
+                        #z0 = np.median(t)
                     else:
                         z0=np.nanmin(d[11:])
                     if zpyc>zglib and zglib > zgl:
                         #q = (z0-zglib)*(z0-zgl)
-                        q = (z0-zglib)#*zglib
-                        heats[l]=abs(zglib)-abs(zpyc)
-                        heats[l]=(-z0-zglib)*(zglib-zgl)
+                        #q = (z0-zglib)#*zglib
+                        heats[l]=abs(zglib)-abs(z0)
+                        #heats[l]=(-z0-zglib)*(zglib-zgl)
+                        #heats[l]=(z0-zglib)*((z0-zglib)/dist)
                         #heats[l] = (zglib-zgl)*(z0-zglib)*n2[d[11:-1]==z0][0]
                         #heats[l]=n2[d[11:-1]==z0]*q
                     else:
