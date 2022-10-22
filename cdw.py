@@ -148,7 +148,7 @@ def closest_WOA_points(grid,baths,bedmach,debug=False):
     f = partial(closest_point_pfun,grid,bedvalues,icemask,bordermask,baths)
     #print(pool.map(f, range(len(grid))))
     #closest_points = pool.map(f, range(10)))
-    closest_points = process_map(f, range(int(len(grid))),max_workers=6,chunksize=1000)
+    closest_points = process_map(f, range(int(len(grid))),max_workers=3,chunksize=100)
 
     try:
         pool.close()
@@ -194,7 +194,7 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,debu
             y = sty[closest[0],closest[1]]
             t = tempvals[:,closest[0],closest[1]]
             s = salvals[:,closest[0],closest[1]]
-            line = ([x,y],[centroid[0],centroid[1]])
+            line = ([physical[l][0],physical[l][1]],[centroid[0],centroid[1]])
             dist = np.sqrt((physical[l][0]-x)**2 + (physical[l][1]-y)**2)
             if ~(np.isnan(line).any()):
                 lines.append(line)
@@ -246,6 +246,55 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,debu
         #ax.imshow(bedvalues)
         plt.xlim(-10**6,10**6)
         plt.ylim(-10**6,10**6)
+        ax.add_collection(lc)
+        plt.show()
+    return heats
+
+def tempFromClosestPointSimple(bedmap,grid,physical,baths,closest_points,sal,temp,debug=False,method="default"):
+    print("temp from closest point")
+    heats=[np.nan]*len(baths)
+    stx = sal.coords["x"].values
+    sty = sal.coords["y"].values
+    salvals,tempvals = sal.s_an.values[0,:,:,:],temp.t_an.values[0,:,:,:]
+    d  = sal.depth.values
+    mask = np.zeros(salvals.shape[1:])
+    mask[:]=np.inf
+    for l in range(salvals.shape[1]):
+        for k in range(salvals.shape[2]):
+            if np.sum(~np.isnan(salvals[:,l,k]))>0 and np.max(d[~np.isnan(salvals[:,l,k])])>2000:
+                mask[l,k] = 1
+    count = 0
+    lines = []
+    bedvalues = bedmap.bed.values
+    for l in tqdm(range(int(len(closest_points)))):
+        if ~np.isnan(closest_points[l]).any():
+            count+=1
+            centroid = [bedmap.coords["x"].values[grid[l][1]],bedmap.coords["y"].values[grid[l][0]]]
+            rdist = np.sqrt((sal.coords["x"]-centroid[0])**2 + (sal.coords["y"]- centroid[1])**2)*mask
+            closest=np.unravel_index(rdist.argmin(), rdist.shape)
+            x = stx[closest[0],closest[1]]
+            y = sty[closest[0],closest[1]]
+            t = tempvals[:,closest[0],closest[1]]
+            s = salvals[:,closest[0],closest[1]]
+            line = ([physical[l][0],physical[l][1]],[x,y])
+            dist = np.sqrt((physical[l][0]-x)**2 + (physical[l][1]-y)**2)
+            if ~(np.isnan(line).any()):
+                lines.append(line)
+            tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
+            # plt.scatter(t,d)
+            # plt.plot(tinterp(d),d)
+            # print(tinterp(d))
+            # plt.show()
+            if np.isnan(t[11:]).all():
+                heats[l]=np.nan
+            elif np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
+                heats[l]=heat_content((tinterp,sinterp),baths[l],100)
+    if debug:
+        fig, ax = plt.subplots()
+        lc = mc.LineCollection(lines, colors="red", linewidths=2)
+        #ax.imshow(bedvalues)
+        plt.xlim(-10**7,10**7)
+        plt.ylim(-10**7,10**7)
         ax.add_collection(lc)
         plt.show()
     return heats

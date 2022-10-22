@@ -12,14 +12,14 @@ import cdw
 writeBedMach = False
 writeGLIB = False
 writePolygons = False
-writeGL = False
+writeGL =False
 createWOA = False
 createClosestWOA = False
 
 ###############################################
 if writeBedMach:
     print("Grabbing BedMachine Data")
-    bedmach = bt.convert_bedmachine("data/BedMachine.nc",coarsenfact=4)
+    bedmach = bt.convert_bedmachine("data/BedMachine.nc",coarsenfact=1)
     with open("data/bedmach.pickle","wb") as f:
         pickle.dump(bedmach,f)
 
@@ -112,37 +112,43 @@ for l in range(len(baths)):
     if np.isnan(baths[l]):
         baths[l]=bedvalues[grid[l][0],grid[l][1]]
 
-glibheats =  cdw.tempFromClosestPoint(bedmach,grid,physical,baths,closest_points,sal,temp)
+areas = bt.shelf_areas()
+#glibheats =  cdw.tempFromClosestPoint(bedmach,grid,physical,depths,closest_points,sal,temp,debug=True)
 physical = np.asarray(physical)
-slopes_by_shelf = bt.shelf_sort(shelf_keys,glibheats)
+#slopes_by_shelf = bt.shelf_sort(shelf_keys,glibheats)
 gldepths_by_shelf = bt.shelf_sort(shelf_keys,depths)
 glibs_by_shelf = bt.shelf_sort(shelf_keys,glibs)
 rignot_shelf_massloss,rignot_shelf_areas,sigma = cdw.extract_rignot_massloss("data/rignot2019.xlsx")
 
-with open("data/shelf_massloss.pickle","wb") as f:
-    pickle.dump(slopes_by_shelf,f)
+#with open("data/hub_shelf_massloss.pickle","wb") as f:
+    #pickle.dump(slopes_by_shelf,f)
+with open("data/hub_shelf_massloss.pickle","rb") as f:
+    slopes_by_shelf = pickle.load(f)
+
+
 
 xs=[]
 ys = []
 zs = []
 znews= [] 
-
-with open("data/MSDS.pickle","rb") as f:
-    MSDS = pickle.load(f)
+#
+#with open("data/MSDS.pickle","rb") as f:
+    #MSDS = pickle.load(f)
 for k in slopes_by_shelf.keys():
     if k in rignot_shelf_massloss:
         x = np.nanmean(slopes_by_shelf[k])
         z = np.nanmean(gldepths_by_shelf[k])
-        c = rignot_shelf_massloss[k]/len(slopes_by_shelf[k])#/rignot_shelf_areas[k]
+        c = (rignot_shelf_massloss[k])/np.sqrt(areas[k])#len(slopes_by_shelf[k])#/rignot_shelf_areas[k]
         xs.append(x)
         ys.append(c)
-        zs.append(z)
+        zs.append(np.sqrt(areas[k]))
         znews.append(np.nanmean(glibs_by_shelf[k]))
         plt.annotate(k,(x,c))
 
 plt.xlabel("Average degrees C above freezing within 200m above HUB")
 plt.ylabel("Rignot 2019 massloss divided by grounding line length")
-plt.scatter(xs,ys,c=znews,cmap="jet")
+plt.scatter(xs,ys,c=zs,cmap="jet")
 plt.colorbar()
 plt.show()
+
 
