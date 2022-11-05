@@ -23,22 +23,42 @@ from tqdm.contrib.concurrent import process_map
 from scipy.ndimage import binary_dilation as bd
 from scipy.ndimage import label 
 
-def heat_content(heat_function,depth,plusminus):
+def heat_content(heat_function,depth,plusminus,zgl):
     #heat = gsw.cp_t_exact(s,t,d)
     depth = np.abs(depth)
     #xnew= np.arange(50,min(depth+0,5000))
     #xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,5000))
-    xnew= np.arange(max(0,depth-200),depth)
+    xnew= np.arange(max(0,depth-plusminus),depth)
     #print(xnew,depth,max(d))
     ynew = heat_function[0](xnew)
     #xnew,ynew = xnew[ynew>0],ynew[ynew>0]
-    ynew = ynew - gsw.CT_freezing(heat_function[1](xnew),xnew,0)
+    ynew = ynew - gsw.CT_freezing(heat_function[1](xnew),zgl,0)
     #return np.nansum(ynew>1.2)/np.sum(~np.isnan(ynew))
     if len(ynew)>0:
-        return np.trapz(ynew,xnew)/len(xnew)
+        return depth#np.trapz(ynew,xnew)/len(xnew)
     else:
         return np.nan
     #return np.trapz(ynew,xnew)-np.dot(np.diff(xnew),gsw.CT_freezing(heat_function[1]((xnew[:-1]+xnew[1:])/2),(xnew[:-1]+xnew[1:])/2,0))
+
+def heat_content_layer(heat_function,depth,plusminus,zgl):
+    #heat = gsw.cp_t_exact(s,t,d)
+    depth = np.abs(depth)
+    #xnew= np.arange(50,min(depth+0,5000))
+    #xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,5000))
+    xnew= np.arange(max(0,depth-500),depth)
+    #print(xnew,depth,max(d))
+    ynew = heat_function[0](xnew)
+    cdwdepth = xnew[np.nanargmax(ynew)]
+    #xnew,ynew = xnew[ynew>0],ynew[ynew>0]
+    ynew = ynew - gsw.CT_freezing(heat_function[1](xnew),zgl,0)
+    #return np.nansum(ynew>1.2)/np.sum(~np.isnan(ynew))
+    if len(ynew)>0:
+        return cdwdepth-depth#np.trapz(ynew,xnew)/len(xnew)
+    else:
+        return np.nan
+    #return np.trapz(ynew,xnew)-np.dot(np.diff(xnew),gsw.CT_freezing(heat_function[1]((xnew[:-1]+xnew[1:])/2),(xnew[:-1]+xnew[1:])/2,0))
+
+
 
 def heat_by_shelf(polygons,heat_functions,baths,bedvalues,grid,physical,withGLIB=True,intsize=50):
     shelf_heat_content = []
@@ -69,7 +89,7 @@ def heat_by_shelf(polygons,heat_functions,baths,bedvalues,grid,physical,withGLIB
             shelf_heat_content.append(np.nan)
     return shelf_heat_content, shelf_heat_content_byshelf
 
-def extract_rignot_massloss(fname):
+def extract_rignot_massloss2019(fname):
     dfs = pd.read_excel(fname,sheet_name=None)
     dfs = dfs['Dataset_S1_PNAS_2018']
     rignot_shelf_massloss={}
@@ -85,6 +105,25 @@ def extract_rignot_massloss(fname):
                 1+1
             
     return rignot_shelf_massloss, rignot_shelf_areas,sigma
+
+
+def extract_rignot_massloss2013(fname):
+    dfs = pd.read_excel(fname,sheet_name=None)
+    dfs = dfs['Sheet1']
+    rignot_shelf_my = {}
+    sigma = {}
+    for l in range(len(dfs["Ice Shelf Name"])):
+        if  dfs["Ice Shelf Name"][l] and dfs["B my"][l]:
+            try:
+                mystr = dfs["B my"][l]
+                my = float(mystr.split("±")[0])
+                sig = float(mystr.split("±")[1])
+                rignot_shelf_my[dfs["Ice Shelf Name"][l]] = my
+                sigma[dfs["Ice Shelf Name"][l]] = sig
+            except:
+                1+1
+            
+    return rignot_shelf_my,sigma
 
 
 # llset = open_CtlDataset('data/polynall.ctl')
@@ -174,17 +213,18 @@ def running_mean(x, N):
     cumsum = np.nancumsum(np.insert(x, 0, 0)) 
     return (cumsum[N:] - cumsum[:-N]) / float(N)
 
-def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,debug=False,method="default"):
+def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shelves,debug=False,method="default"):
     print("temp from closest point")
     heats=[np.nan]*len(baths)
     stx = sal.coords["x"].values
     sty = sal.coords["y"].values
+    projection = pyproj.Proj("epsg:3031")
     salvals,tempvals = sal.s_an.values[0,:,:,:],temp.t_an.values[0,:,:,:]
     d  = sal.depth.values
     count = 0
     lines = []
     bedvalues = bedmap.bed.values
-    for l in tqdm(range(len(closest_points))):
+    for l in tqdm(range(len(closest_points))[::-1]):
         if ~np.isnan(closest_points[l]).any():
             count+=1
             centroid = [bedmap.coords["x"].values[closest_points[l][1]],bedmap.coords["y"].values[closest_points[l][0]]]
@@ -194,8 +234,11 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,debu
             y = sty[closest[0],closest[1]]
             t = tempvals[:,closest[0],closest[1]]
             s = salvals[:,closest[0],closest[1]]
+            lon,lat = projection(x,y,inverse=True)
+            s = gsw.SA_from_SP(s,d,lon,lat)
+            t = gsw.CT_from_t(s,t,d)
             line = ([physical[l][0],physical[l][1]],[centroid[0],centroid[1]])
-            dist = np.sqrt((physical[l][0]-x)**2 + (physical[l][1]-y)**2)
+            dist = np.sqrt((physical[l][1]-x)**2 + (physical[l][0]-y)**2)
             if ~(np.isnan(line).any()):
                 lines.append(line)
             tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
@@ -205,9 +248,14 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,debu
             # plt.show()
             if method=="default":
                 if np.isnan(t[11:]).all():
-                    heats[l]=np.nan
+                    heats[l]=np.nan#
                 elif np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
-                    heats[l]=heat_content((tinterp,sinterp),baths[l],100)
+                    if shelves[l] == "Ferrigno" and False:
+                        plt.plot(t,-d)
+                        plt.axhline(baths[l])
+                        plt.show()
+                    zgl = bedvalues[grid[l][0],grid[l][1]]
+                    heats[l]=heat_content_layer((tinterp,sinterp),baths[l],200,bedvalues[grid[l][1],grid[l][0]])
             elif method=="a":
                 zglib = baths[l]
                 zgl = bedvalues[grid[l][0],grid[l][1]]
@@ -230,7 +278,7 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,debu
                     if zpyc>zglib and zglib > zgl:
                         #q = (z0-zglib)*(z0-zgl)
                         #q = (z0-zglib)#*zglib
-                        heats[l]=abs(zglib)-abs(z0)
+                        heats[l]=abs(zpyc)-abs(zglib)
                         #heats[l]=(-z0-zglib)*(zglib-zgl)
                         #heats[l]=(z0-zglib)*((z0-zglib)/dist)
                         #heats[l] = (zglib-zgl)*(z0-zglib)*n2[d[11:-1]==z0][0]
@@ -288,7 +336,7 @@ def tempFromClosestPointSimple(bedmap,grid,physical,baths,closest_points,sal,tem
             if np.isnan(t[11:]).all():
                 heats[l]=np.nan
             elif np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
-                heats[l]=heat_content((tinterp,sinterp),baths[l],100)
+                heats[l]=heat_content((tinterp,sinterp),baths[l],500,0)#*((baths[l]-bedvalues[grid[l][1],grid[1][0]])/(dist))
     if debug:
         fig, ax = plt.subplots()
         lc = mc.LineCollection(lines, colors="red", linewidths=2)

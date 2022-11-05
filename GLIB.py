@@ -11,7 +11,8 @@ from bathtub import get_line_points, shelf_sort
 import copy
 from matplotlib import colors
 from scipy.ndimage import binary_dilation as bd
-from cdw import extract_rignot_massloss
+from cdw import extract_rignot_massloss2019
+from cdw import extract_rignot_massloss2013
 
 def generateGLIBs(depth,ice,resolution=5):
     #We don't care about the structure of the bathymetry off the shelf break for now

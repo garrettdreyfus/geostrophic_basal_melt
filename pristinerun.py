@@ -3,7 +3,13 @@ import pickle
 import GLIB
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.tree import DecisionTreeRegressor
+from sklearn import preprocessing
+from sklearn import tree
 import numpy as np
+from sklearn.metrics import r2_score
 import woa
 import cdw
 
@@ -112,13 +118,16 @@ for l in range(len(baths)):
     if np.isnan(baths[l]):
         baths[l]=bedvalues[grid[l][0],grid[l][1]]
 
-areas = bt.shelf_areas()
-#glibheats =  cdw.tempFromClosestPoint(bedmach,grid,physical,depths,closest_points,sal,temp,debug=True)
+shelf_areas = bt.shelf_areas()
+glibheats = np.asarray([0]*len(physical))# cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys)
+glibheats = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys)
+#glibheats = cdw.tempFromClosestPointSimple(bedmach,grid,physical,depths,physical,sal,temp,shelf_keys)
 physical = np.asarray(physical)
-#slopes_by_shelf = bt.shelf_sort(shelf_keys,glibheats)
+slopes_by_shelf = bt.shelf_sort(shelf_keys,glibheats)
 gldepths_by_shelf = bt.shelf_sort(shelf_keys,depths)
 glibs_by_shelf = bt.shelf_sort(shelf_keys,glibs)
-rignot_shelf_massloss,rignot_shelf_areas,sigma = cdw.extract_rignot_massloss("data/rignot2019.xlsx")
+#rignot_shelf_massloss,rignot_shelf_areas,sigma = cdw.extract_rignot_massloss2019("data/rignot2019.xlsx")
+rignot_shelf_massloss,sigmas = cdw.extract_rignot_massloss2013("data/rignot2013.xlsx")
 
 #with open("data/hub_shelf_massloss.pickle","wb") as f:
     #pickle.dump(slopes_by_shelf,f)
@@ -126,29 +135,97 @@ with open("data/hub_shelf_massloss.pickle","rb") as f:
     slopes_by_shelf = pickle.load(f)
 
 
+#with open("data/cdwdiff_hub_shelf_massloss.pickle","wb") as f:
+    #pickle.dump(slopes_by_shelf,f)
+#with open("data/cdwdiff_hub_shelf_massloss.pickle","rb") as f:
+    #slopes_by_shelf = pickle.load(f)
 
-xs=[]
+
+
+thermals=[]
+msds = []
 ys = []
-zs = []
+gldepths = []
+glibshelf=[]
+
+
 znews= [] 
+bars = []
+areas = []
+
+mys = []
+
 #
 #with open("data/MSDS.pickle","rb") as f:
     #MSDS = pickle.load(f)
+
+labels = []
 for k in slopes_by_shelf.keys():
     if k in rignot_shelf_massloss:
-        x = np.nanmean(slopes_by_shelf[k])
-        z = np.nanmean(gldepths_by_shelf[k])
-        c = (rignot_shelf_massloss[k])/np.sqrt(areas[k])#len(slopes_by_shelf[k])#/rignot_shelf_areas[k]
-        xs.append(x)
-        ys.append(c)
-        zs.append(np.sqrt(areas[k]))
-        znews.append(np.nanmean(glibs_by_shelf[k]))
-        plt.annotate(k,(x,c))
+        labels.append(k)
+        thermals.append(np.nanmean(slopes_by_shelf[k]))
+        gldepths.append(np.nanmean(gldepths_by_shelf[k]))
+        glibshelf.append(np.nanmean(glibs_by_shelf[k]))
+        bars.append(sigmas[k])
+        areas.append(shelf_areas[k])
+        mys.append(rignot_shelf_massloss[k])
 
 plt.xlabel("Average degrees C above freezing within 200m above HUB")
 plt.ylabel("Rignot 2019 massloss divided by grounding line length")
-plt.scatter(xs,ys,c=zs,cmap="jet")
-plt.colorbar()
+#plt.scatter(xs,ys,c=zs,cmap="jet")
+print("here")
+if True:
+    #xs = np.asarray([np.asarray(np.sqrt(areas)),np.asarray(thermals)**2])
+    xs = np.asarray(([np.asarray(thermals)**2,np.asarray(np.sqrt(areas)),(np.asarray(thermals)**2)*np.asarray(np.sqrt(areas))]))
+    scaler = preprocessing.StandardScaler().fit(xs.T)
+    xs = scaler.transform(xs.T)
+    print(xs)
+    model = LinearRegression().fit(xs, mys)
+    #r_sq = model.coef_#score(xs.reshape((-1, 1)), ys)
+    print(model.coef_)
+    #xs = np.asarray(xs)/r_sq
+    xs = model.predict(xs)
+    print("RMSE",np.sqrt(np.mean((mys-xs)**2)))
+    print("RMSE",np.sqrt(np.mean(((mys-xs)/mys)**2)))
+    print("r2,", r2_score(mys,xs))
+if False:
+    w = np.asarray(np.sqrt(areas))
+    s = np.argsort(w)
+    labels=np.asarray(labels)[s]
+    bars=np.asarray(bars)[s]
+    mys=np.asarray(mys)[s]
+    xs = np.asarray(([np.asarray(thermals)[s]**(2),areas]))
+    scaler = preprocessing.StandardScaler().fit(xs.T)
+    xs = scaler.transform(xs.T)
+    print(xs)
+    print(xs.shape)
+    #model = RandomForestRegressor(max_depth=5).fit(xs[:,::3].T, np.asarray(mys)[::3])
+    model = RandomForestRegressor(max_depth=3).fit(xs[::2,:], np.asarray(mys)[::2])
+    print(model.feature_importances_)
+    print(2)
+    #r_sq = model.coef_#score(xs.reshape((-1, 1)), ys)
+    #xs = np.asarray(xs)/r_sq
+    xs = model.predict(xs)
+    print(3)
+if False:
+    xs = np.asarray(([np.asarray(np.sqrt(areas)),np.asarray(thermals)**(3/2)]))
+    print(xs.shape)
+    model = DecisionTreeRegressor(max_depth=2).fit(xs.T, mys)
+    tree.plot_tree(model)
+    plt.show()
+    print(2)
+    #r_sq = model.coef_#score(xs.reshape((-1, 1)), ys)
+    #xs = np.asarray(xs)/r_sq
+    xs = model.predict(xs.T)
+    print(3)
+print(xs)
+
+
+plt.errorbar(xs,mys,yerr=bars,fmt="o")
+plt.plot(range(30),range(30))
+for i in range(len(xs)):
+    plt.annotate(labels[i],(xs[i],mys[i]))
+#plt.colorbar()
 plt.show()
 
 
