@@ -8,10 +8,13 @@ import itertools
 import pickle
 from tqdm import tqdm
 from shapely.geometry import Polygon, Point
+import shapely
 import time
 from scipy.ndimage import label 
 from scipy.ndimage import binary_dilation as bd
 import xarray as xr
+import rioxarray as riox
+import rasterio
 
 
 def save_polygons():
@@ -38,6 +41,39 @@ def save_polygons():
 def PolyArea(x,y):
     return 0.5*np.abs(np.dot(x,np.roll(y,1))-np.dot(y,np.roll(x,1)))
 
+def shelf_mass_loss(dsfname,polygons,firstrun=False):
+    if firstrun:
+        melts = xr.open_dataset(dsfname)
+        melts["phony_dim_1"] = melts.x.T[0]
+        melts["phony_dim_0"] = melts.y.T[0]
+        melts = melts.drop_vars(["x","y"])
+        melts = melts.rename({"phony_dim_1":"x","phony_dim_0":"y"})
+        melts.rio.to_raster("data/amundsilli.tif")
+        print(melts)
+    melt_rates = {}
+    for k in tqdm(polygons.keys()):
+        raster = riox.open_rasterio('data/amundsilli.tif')
+        raster = raster.rio.write_crs("epsg:3031")
+        gons = []
+        parts = polygons[k][1]
+        polygon = polygons[k][0]
+        if len(parts)>1:
+            parts.append(-1)
+            for l in range(0,len(parts)-1):
+                poly_path=shapely.geometry.Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T)
+                gons.append(poly_path)
+        else:
+            gons = [polygon]
+        print(k)
+        print("made it hearE")
+        clipped = raster.rio.clip(gons,from_disk=True)
+        melt_rates[k] = np.nanmean(clipped[0])
+        del clipped
+
+    return melt_rates
+
+
+    
 def shelf_areas():
     myshp = open("regions/IceBoundaries_Antarctica_v02.shp", "rb")
     mydbf = open("regions/IceBoundaries_Antarctica_v02.dbf", "rb")

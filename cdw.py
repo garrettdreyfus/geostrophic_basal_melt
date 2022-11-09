@@ -1,6 +1,7 @@
-#import shapefile
+import shapefile
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
+import shapely
 import rockhound as rh
 import matplotlib.pyplot as plt
 import cmocean
@@ -22,6 +23,8 @@ from functools import partial
 from tqdm.contrib.concurrent import process_map
 from scipy.ndimage import binary_dilation as bd
 from scipy.ndimage import label 
+import rioxarray as riox
+import rasterio
 
 def heat_content(heat_function,depth,plusminus,zgl):
     #heat = gsw.cp_t_exact(s,t,d)
@@ -32,10 +35,10 @@ def heat_content(heat_function,depth,plusminus,zgl):
     #print(xnew,depth,max(d))
     ynew = heat_function[0](xnew)
     #xnew,ynew = xnew[ynew>0],ynew[ynew>0]
-    ynew = ynew - gsw.CT_freezing(heat_function[1](xnew),zgl,0)
+    ynew = ynew - gsw.CT_freezing(heat_function[1](xnew),xnew,0)
     #return np.nansum(ynew>1.2)/np.sum(~np.isnan(ynew))
     if len(ynew)>0:
-        return depth#np.trapz(ynew,xnew)/len(xnew)
+        return np.trapz(ynew,xnew)/len(xnew)
     else:
         return np.nan
     #return np.trapz(ynew,xnew)-np.dot(np.diff(xnew),gsw.CT_freezing(heat_function[1]((xnew[:-1]+xnew[1:])/2),(xnew[:-1]+xnew[1:])/2,0))
@@ -125,27 +128,69 @@ def extract_rignot_massloss2013(fname):
             
     return rignot_shelf_my,sigma
 
+def polyna_dataset(polygons):
+    llset = open_CtlDataset('data/polynall.ctl')
+    llset = llset.rename({"lat":"y","lon":"x"})
+    llset = llset.rio.write_crs("epsg:4326")
+    llset["pr"] = llset.pr.mean(axis=0)
+    llset.rio.nodata=np.nan
+    llset = llset.rio.reproject("epsg:3031")
+    llset.pr.values[llset.pr.values>1000]=np.nan
+    llset.rio.to_raster("data/polyna.tif")
+    plt.show()
+    polyna_rates = {}
+    for k in tqdm(polygons.keys()):
+        raster = riox.open_rasterio('data/polyna.tif')
+        raster = raster.rio.write_crs("epsg:3031")
+        gons = []
+        parts = polygons[k][1]
+        polygon = polygons[k][0]
+        if len(parts)>1:
+            parts.append(-1)
+            for l in range(0,len(parts)-1):
+                poly_path=shapely.geometry.Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T).buffer(10**4)
+                gons.append(poly_path)
+        else:
+            gons = [polygon]
+        print(k)
+        print("made it hearE")
+        clipped = raster.rio.clip(gons)
+        #plt.imshow(clipped[0])
+        #plt.show()
+        polyna_rates[k] = np.nanmean(np.asarray(clipped[0])[clipped<1000])
+        del clipped
 
-# llset = open_CtlDataset('data/polynall.ctl')
-# projection = pyproj.Proj("epsg:3031")
-# lons,lats = np.meshgrid(llset.lon,llset.lat)
-# x,y = projection.transform(lons,lats)
-# llset.pr.values[0,:,:][llset.pr.values[0,:,:]==0] = np.nan
-# llset.coords["x"]= (("lat","lon"),x)
-# llset.coords["y"]= (("lat","lon"),y)
-# bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
-# #
-#xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
-# projection = pyproj.Proj("epsg:4326")
-# print("transform")
-# xvals,yvals = projection.transform(xvals,yvals)
-# polyna = np.full_like(bedmap.bed.values,np.nan)
-# print("interp")
-# from scipy.interpolate import griddata
-# xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
-# polyna = griddata(np.asarray([llset.x.values.flatten(),llset.y.values.flatten()]).T,llset.pr.values.flatten(),(xvals,yvals))
-# with open("data/polynainterp.pickle","wb") as f:
-#     pickle.dump(polyna,f)
+    return polyna_rates
+
+
+    #llset.rio.to_raster("data/amundsilli.tif")
+
+        #melts = xr.open_dataset(dsfname)
+        #melts["phony_dim_1"] = melts.x.T[0]
+        #melts["phony_dim_0"] = melts.y.T[0]
+        #melts = melts.drop_vars(["x","y"])
+        #melts = melts.rename({"phony_dim_1":"x","phony_dim_0":"y"})
+        #melts.rio.to_raster("data/amundsilli.tif")
+        #print(melts)
+#
+    #projection = pyproj.Proj("epsg:3031")
+    #lons,lats = np.meshgrid(llset.lon,llset.lat)
+    #x,y = projection.transform(lons,lats)
+    #llset.pr.values[0,:,:][llset.pr.values[0,:,:]==0] = np.nan
+    #llset.coords["x"]= (("lat","lon"),x)
+    #llset.coords["y"]= (("lat","lon"),y)
+    #bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
+    #xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
+    #projection = pyproj.Proj("epsg:4326")
+    #print("transform")
+    #xvals,yvals = projection.transform(xvals,yvals)
+    #polyna = np.full_like(bedmap.bed.values,np.nan)
+    #print("interp")
+    #from scipy.interpolate import griddata
+    #xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
+    ##polyna = griddata(np.asarray([llset.x.values.flatten(),llset.y.values.flatten()]).T,llset.pr.values.flatten(),(xvals,yvals))
+    #with open("data/polynainterp.pickle","wb") as f:
+        #pickle.dump(polyna,f)
 
 
 def closest_point_pfun(grid,bedvalues,icemask,bordermask,baths,l):
@@ -250,12 +295,8 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shel
                 if np.isnan(t[11:]).all():
                     heats[l]=np.nan#
                 elif np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
-                    if shelves[l] == "Ferrigno" and False:
-                        plt.plot(t,-d)
-                        plt.axhline(baths[l])
-                        plt.show()
                     zgl = bedvalues[grid[l][0],grid[l][1]]
-                    heats[l]=heat_content_layer((tinterp,sinterp),baths[l],200,bedvalues[grid[l][1],grid[l][0]])
+                    heats[l]=heat_content((tinterp,sinterp),baths[l],1000,bedvalues[grid[l][1],grid[l][0]])
             elif method=="a":
                 zglib = baths[l]
                 zgl = bedvalues[grid[l][0],grid[l][1]]
