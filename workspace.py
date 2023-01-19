@@ -20,6 +20,7 @@ import winds as wind
 # Create GLIB
 
 writeBedMach = False
+writeShelfNumbers = True
 writeGLIB = False
 writePolygons = False
 writeGL =False
@@ -39,6 +40,8 @@ with open("data/bedmach.pickle","rb") as f:
 ## Load these into memory just once for speed
 bedvalues = bedmach.bed.values
 icemask = bedmach.icemask_grounded_and_shelves.values
+
+
 ##################################################
 
 ##################################################
@@ -63,6 +66,18 @@ if writePolygons:
 
 with open("data/shelfpolygons.pickle","rb") as f:
     polygons = pickle.load(f)
+
+
+##################################################
+
+##################################################
+
+if writeShelfNumbers:
+    with open("data/shelfnumbers.pickle","wb") as f:
+        pickle.dump(bt.shelf_numbering(polygons,bedmach),f)
+with open("data/shelfnumbers.pickle","rb") as f:
+    shelf_number_labels, shelf_numbers = pickle.load(f)
+    
 
 ################################################
 
@@ -246,12 +261,12 @@ for k in slopes_by_shelf.keys():
 #plt.ylabel("Rignot 2019 massloss divided by grounding line length")
 ##plt.scatter(xs,ys,c=zs,cmap="jet")
 #print("here")
-if False:
+if True:
     ##xs = np.asarray([np.asarray(np.sqrt(areas)),np.asarray(thermals)**2])
     #xs = np.asarray(([np.asarray(thermals)*np.abs(thermals),np.asarray(np.sqrt(areas)),(np.asarray(thermals)**2)*np.asarray(np.sqrt(areas))]))
     print(thermals)
     polyna = np.asarray(polyna)
-    xs = np.asarray(([np.asarray(thermals)*np.abs(thermals),-np.asarray(winds)*np.abs(winds)]))
+    xs = np.asarray(([np.asarray(thermals)*np.abs(thermals),np.asarray(thermals)*np.abs(thermals)]))
     scaler = preprocessing.StandardScaler().fit(xs.T)
     xs = scaler.transform(xs.T)
     print(mys)
@@ -263,7 +278,7 @@ if False:
     print("RMSE",np.sqrt(np.mean((mys-xs)**2)))
     print("RMSE",np.sqrt(np.mean(((mys-xs)/mys)**2)))
     print("r2,", r2_score(mys,xs))
-if True:
+if False:
     w = np.asarray(np.sqrt(areas))
     s = np.arange(len(areas))
     labels=np.asarray(labels)[s]
@@ -301,7 +316,7 @@ if True:
 #
 #
 #plt.errorbar(xs,mys,yerr=bars,fmt="o")
-plt.scatter(polyna,mys)
+plt.scatter(xs,mys)
 plt.plot(range(30),range(30))
 for i in range(len(xs)):
     plt.annotate(labels[i],(polyna[i],mys[i]))

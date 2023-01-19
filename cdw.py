@@ -374,10 +374,12 @@ def tempFromClosestPointSimple(bedmap,grid,physical,baths,closest_points,sal,tem
             # plt.plot(tinterp(d),d)
             # print(tinterp(d))
             # plt.show()
+            if ~(np.isnan(line).any()):
+                lines.append(line)
             if np.isnan(t[11:]).all():
                 heats[l]=np.nan
             elif np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
-                heats[l]=heat_content((tinterp,sinterp),baths[l],500,0)#*((baths[l]-bedvalues[grid[l][1],grid[1][0]])/(dist))
+                heats[l]=heat_content((tinterp,sinterp),baths[l],6000,0)#*((baths[l]-bedvalues[grid[l][1],grid[1][0]])/(dist))
     if debug:
         fig, ax = plt.subplots()
         lc = mc.LineCollection(lines, colors="red", linewidths=2)
@@ -387,3 +389,93 @@ def tempFromClosestPointSimple(bedmap,grid,physical,baths,closest_points,sal,tem
         ax.add_collection(lc)
         plt.show()
     return heats
+
+def tempProfileByShelf(bedmap,grid,physical,depths,closest_points,sal,temp,shelf_keys,debug=False,method="default"):
+    print("temp from closest point")
+    stx = sal.coords["x"].values
+    sty = sal.coords["y"].values
+    salvals,tempvals = sal.s_an.values[0,:,:,:],temp.t_an.values[0,:,:,:]
+    d  = sal.depth.values
+    mask = np.zeros(salvals.shape[1:])
+    mask[:]=np.inf
+    for l in range(salvals.shape[1]):
+        for k in range(salvals.shape[2]):
+            if np.sum(~np.isnan(salvals[:,l,k]))>2 and np.max(d[~np.isnan(salvals[:,l,k])])>1500:
+                mask[l,k] = 1
+    count = 0
+    lines = []
+    bedvalues = bedmap.bed.values
+    tempprofs = []
+    salprofs = []
+    for l in tqdm(range(int(len(closest_points)))):
+        if ~np.isnan(closest_points[l]).any():
+            count+=1
+            centroid = [bedmap.coords["x"].values[grid[l][1]],bedmap.coords["y"].values[grid[l][0]]]
+            rdist = np.sqrt((sal.coords["x"]-centroid[0])**2 + (sal.coords["y"]- centroid[1])**2)*mask
+            rdist[np.where(rdist<250000)]=np.inf
+            closest=np.unravel_index(rdist.argmin(), rdist.shape)
+            x = stx[closest[0],closest[1]]
+            y = sty[closest[0],closest[1]]
+            t = tempvals[:,closest[0],closest[1]]
+            s = salvals[:,closest[0],closest[1]]
+            line = ([physical[l][0],physical[l][1]],[x,y])
+            dist = np.sqrt((physical[l][0]-x)**2 + (physical[l][1]-y)**2)
+            if ~(np.isnan(line).any()):
+                lines.append(line)
+            #tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
+            tempprofs.append(t)
+            salprofs.append(s)
+            line = ([x,y],[centroid[0],centroid[1]])
+    tempprofs = np.asarray(tempprofs)
+    salprofs = np.asarray(salprofs)
+    prof_dict = {}
+    shelf_keys = np.asarray(shelf_keys)
+    shelf_keys[shelf_keys==None] = "None"
+
+    fig, ax = plt.subplots()
+    lc = mc.LineCollection(lines, colors="red", linewidths=2)
+    #ax.imshow(bedvalues)
+    plt.xlim(-10**7,10**7)
+    plt.ylim(-10**7,10**7)
+    ax.add_collection(lc)
+    plt.show()
+
+    for k in np.unique(shelf_keys):
+        if k !="None":
+            t = np.mean(tempprofs[shelf_keys==k],axis=0)
+            s = np.mean(salprofs[shelf_keys==k],axis=0)
+            idd = np.nanmin(np.asarray(depths)[shelf_keys==k])
+            prof_dict[k] = (t,s,d,idd)
+    return prof_dict
+
+def GLIB_by_shelf(GLIB,bedmach,polygons):
+    GLIBmach = bedmach.bed.copy(deep=True)
+    GLIBmach.values[:] = GLIB[:]
+    GLIBmach = GLIBmach.rio.write_crs("epsg:3031")
+    print(GLIBmach)
+    del GLIBmach.attrs['grid_mapping']
+    GLIBmach.rio.to_raster("data/glibmach.tif")
+
+    glib_by_shelf = {}
+    for k in tqdm(polygons.keys()):
+        raster = riox.open_rasterio('data/glibmach.tif')
+        gons = []
+        parts = polygons[k][1]
+        polygon = polygons[k][0]
+        if len(parts)>1:
+            parts.append(-1)
+            for l in range(0,len(parts)-1):
+                poly_path=shapely.geometry.Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T).buffer(10**4)
+                gons.append(poly_path)
+        else:
+            gons = [polygon]
+        print(k)
+        print("made it hearE")
+        clipped = raster.rio.clip(gons)
+        if k == "Ronne":
+            plt.imshow(clipped[0])
+            plt.show()
+        glib_by_shelf[k] = np.nanmean(np.asarray(clipped[0])[clipped>-9000])
+        print(glib_by_shelf[k])
+    return glib_by_shelf
+ 

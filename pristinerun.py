@@ -53,8 +53,6 @@ if writeGLIB:
 with open("data/bedmachGLIB.pickle","rb") as f:
     GLIB = pickle.load(f)
 
-plt.imshow(bedvalues-GLIB)
-plt.show()
 ##################################################
 
 ##################################################
@@ -113,6 +111,5 @@ if createClosestWOA:
         pickle.dump(closest_points,f)
 with open("data/closest_points.pickle","rb") as f:
     closest_points = pickle.load(f)
-
 
 
