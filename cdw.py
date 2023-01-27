@@ -1,6 +1,7 @@
-#import shapefile
+import shapefile
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
+import shapely
 import rockhound as rh
 import matplotlib.pyplot as plt
 import cmocean
@@ -22,6 +23,8 @@ from functools import partial
 from tqdm.contrib.concurrent import process_map
 from scipy.ndimage import binary_dilation as bd
 from scipy.ndimage import label 
+import rioxarray as riox
+import rasterio
 
 def quad_local_param(thermal_forcing):
     
@@ -77,6 +80,26 @@ def heat_content(heat_function,depth,plusminus):
         return np.nan
     #return np.trapz(ynew,xnew)-np.dot(np.diff(xnew),gsw.CT_freezing(heat_function[1]((xnew[:-1]+xnew[1:])/2),(xnew[:-1]+xnew[1:])/2,0))
 
+def heat_content_layer(heat_function,depth,plusminus,zgl):
+    #heat = gsw.cp_t_exact(s,t,d)
+    depth = np.abs(depth)
+    #xnew= np.arange(50,min(depth+0,5000))
+    #xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,5000))
+    xnew= np.arange(max(0,depth-500),depth)
+    #print(xnew,depth,max(d))
+    ynew = heat_function[0](xnew)
+    cdwdepth = xnew[np.nanargmax(ynew)]
+    #xnew,ynew = xnew[ynew>0],ynew[ynew>0]
+    ynew = ynew - gsw.CT_freezing(heat_function[1](xnew),zgl,0)
+    #return np.nansum(ynew>1.2)/np.sum(~np.isnan(ynew))
+    if len(ynew)>0:
+        return cdwdepth-depth#np.trapz(ynew,xnew)/len(xnew)
+    else:
+        return np.nan
+    #return np.trapz(ynew,xnew)-np.dot(np.diff(xnew),gsw.CT_freezing(heat_function[1]((xnew[:-1]+xnew[1:])/2),(xnew[:-1]+xnew[1:])/2,0))
+
+
+
 def heat_by_shelf(polygons,heat_functions,baths,bedvalues,grid,physical,withGLIB=True,intsize=50):
     shelf_heat_content = []
     shelf_heat_content_byshelf={}
@@ -106,7 +129,7 @@ def heat_by_shelf(polygons,heat_functions,baths,bedvalues,grid,physical,withGLIB
             shelf_heat_content.append(np.nan)
     return shelf_heat_content, shelf_heat_content_byshelf
 
-def extract_rignot_massloss(fname):
+def extract_rignot_massloss2019(fname):
     dfs = pd.read_excel(fname,sheet_name=None)
     dfs = dfs['Dataset_S1_PNAS_2018']
     rignot_shelf_massloss={}
@@ -143,26 +166,87 @@ def extract_rignot_massloss2013(fname):
 
 
 
-# llset = open_CtlDataset('data/polynall.ctl')
-# projection = pyproj.Proj("epsg:3031")
-# lons,lats = np.meshgrid(llset.lon,llset.lat)
-# x,y = projection.transform(lons,lats)
-# llset.pr.values[0,:,:][llset.pr.values[0,:,:]==0] = np.nan
-# llset.coords["x"]= (("lat","lon"),x)
-# llset.coords["y"]= (("lat","lon"),y)
-# bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
-# #
-#xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
-# projection = pyproj.Proj("epsg:4326")
-# print("transform")
-# xvals,yvals = projection.transform(xvals,yvals)
-# polyna = np.full_like(bedmap.bed.values,np.nan)
-# print("interp")
-# from scipy.interpolate import griddata
-# xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
-# polyna = griddata(np.asarray([llset.x.values.flatten(),llset.y.values.flatten()]).T,llset.pr.values.flatten(),(xvals,yvals))
-# with open("data/polynainterp.pickle","wb") as f:
-#     pickle.dump(polyna,f)
+def extract_rignot_massloss2013(fname):
+    dfs = pd.read_excel(fname,sheet_name=None)
+    dfs = dfs['Sheet1']
+    rignot_shelf_my = {}
+    sigma = {}
+    for l in range(len(dfs["Ice Shelf Name"])):
+        if  dfs["Ice Shelf Name"][l] and dfs["B my"][l]:
+            try:
+                mystr = dfs["B my"][l]
+                my = float(mystr.split("±")[0])
+                sig = float(mystr.split("±")[1])
+                rignot_shelf_my[dfs["Ice Shelf Name"][l]] = my
+                sigma[dfs["Ice Shelf Name"][l]] = sig
+            except:
+                1+1
+            
+    return rignot_shelf_my,sigma
+
+def polyna_dataset(polygons):
+    llset = open_CtlDataset('data/polynall.ctl')
+    llset = llset.rename({"lat":"y","lon":"x"})
+    llset = llset.rio.write_crs("epsg:4326")
+    llset["pr"] = llset.pr.mean(axis=0)
+    llset.rio.nodata=np.nan
+    llset = llset.rio.reproject("epsg:3031")
+    llset.pr.values[llset.pr.values>1000]=np.nan
+    llset.rio.to_raster("data/polyna.tif")
+    plt.show()
+    polyna_rates = {}
+    for k in tqdm(polygons.keys()):
+        raster = riox.open_rasterio('data/polyna.tif')
+        raster = raster.rio.write_crs("epsg:3031")
+        gons = []
+        parts = polygons[k][1]
+        polygon = polygons[k][0]
+        if len(parts)>1:
+            parts.append(-1)
+            for l in range(0,len(parts)-1):
+                poly_path=shapely.geometry.Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T).buffer(10**4)
+                gons.append(poly_path)
+        else:
+            gons = [polygon]
+        print(k)
+        print("made it hearE")
+        clipped = raster.rio.clip(gons)
+        #plt.imshow(clipped[0])
+        #plt.show()
+        polyna_rates[k] = np.nanmean(np.asarray(clipped[0])[clipped<1000])
+        del clipped
+
+    return polyna_rates
+
+
+    #llset.rio.to_raster("data/amundsilli.tif")
+
+        #melts = xr.open_dataset(dsfname)
+        #melts["phony_dim_1"] = melts.x.T[0]
+        #melts["phony_dim_0"] = melts.y.T[0]
+        #melts = melts.drop_vars(["x","y"])
+        #melts = melts.rename({"phony_dim_1":"x","phony_dim_0":"y"})
+        #melts.rio.to_raster("data/amundsilli.tif")
+        #print(melts)
+#
+    #projection = pyproj.Proj("epsg:3031")
+    #lons,lats = np.meshgrid(llset.lon,llset.lat)
+    #x,y = projection.transform(lons,lats)
+    #llset.pr.values[0,:,:][llset.pr.values[0,:,:]==0] = np.nan
+    #llset.coords["x"]= (("lat","lon"),x)
+    #llset.coords["y"]= (("lat","lon"),y)
+    #bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
+    #xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
+    #projection = pyproj.Proj("epsg:4326")
+    #print("transform")
+    #xvals,yvals = projection.transform(xvals,yvals)
+    #polyna = np.full_like(bedmap.bed.values,np.nan)
+    #print("interp")
+    #from scipy.interpolate import griddata
+    #xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
+    ##polyna = griddata(np.asarray([llset.x.values.flatten(),llset.y.values.flatten()]).T,llset.pr.values.flatten(),(xvals,yvals))
+    #with open("data/polynainterp.pickle","wb") as f:
+        #pickle.dump(polyna,f)
 
 
 def closest_point_pfun(grid,bedvalues,icemask,bordermask,baths,l):
@@ -204,7 +288,7 @@ def closest_WOA_points_bfs(grid,baths,bedmach,debug=False):
     f = partial(closest_point_pfun,grid,bedvalues,icemask,bordermask,baths)
     #print(pool.map(f, range(len(grid))))
     #closest_points = pool.map(f, range(10)))
-    closest_points = process_map(f, range(int(len(grid))),max_workers=6,chunksize=1000)
+    closest_points = process_map(f, range(int(len(grid))),max_workers=3,chunksize=100)
 
     try:
         pool.close()
@@ -259,17 +343,18 @@ def running_mean(x, N):
     cumsum = np.nancumsum(np.insert(x, 0, 0)) 
     return (cumsum[N:] - cumsum[:-N]) / float(N)
 
-def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,debug=False,method="default"):
+def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shelves,debug=False,method="default"):
     print("temp from closest point")
     heats=[np.nan]*len(baths)
     stx = sal.coords["x"].values
     sty = sal.coords["y"].values
+    projection = pyproj.Proj("epsg:3031")
     salvals,tempvals = sal.s_an.values[0,:,:,:],temp.t_an.values[0,:,:,:]
     d  = sal.depth.values
     count = 0
     lines = []
     bedvalues = bedmap.bed.values
-    for l in tqdm(range(len(closest_points))):
+    for l in tqdm(range(len(closest_points))[::-1]):
         if ~np.isnan(closest_points[l]).any():
             count+=1
             centroid = [bedmap.coords["x"].values[closest_points[l][1]],bedmap.coords["y"].values[closest_points[l][0]]]
@@ -279,8 +364,11 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,debu
             y = sty[closest[0],closest[1]]
             t = tempvals[:,closest[0],closest[1]]
             s = salvals[:,closest[0],closest[1]]
-            line = ([x,y],[centroid[0],centroid[1]])
-            dist = np.sqrt((physical[l][0]-x)**2 + (physical[l][1]-y)**2)
+            lon,lat = projection(x,y,inverse=True)
+            s = gsw.SA_from_SP(s,d,lon,lat)
+            t = gsw.CT_from_t(s,t,d)
+            line = ([physical[l][0],physical[l][1]],[centroid[0],centroid[1]])
+            dist = np.sqrt((physical[l][1]-x)**2 + (physical[l][0]-y)**2)
             if ~(np.isnan(line).any()):
                 lines.append(line)
             tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
@@ -290,7 +378,7 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,debu
             # plt.show()
             if method=="default":
                 if np.isnan(t[11:]).all():
-                    heats[l]=np.nan
+                    heats[l]=np.nan#
                 elif np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
                     heats[l]=heat_content((tinterp,sinterp),baths[l],200)
             elif method=="a":
@@ -312,18 +400,11 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,debu
                         #z0 = np.median(t)
                     else:
                         z0=np.nanmin(d[11:])
-
                     heats[l]=abs(zglib)-abs(z0)
-                    # if zpyc>zglib and zglib > zgl:
-                    #     #q = (z0-zglib)*(z0-zgl)
-                    #     #q = (z0-zglib)#*zglib
-                    #     heats[l]=abs(zglib)-abs(z0)
-                    #     #heats[l]=(-z0-zglib)*(zglib-zgl)
-                    #     #heats[l]=(z0-zglib)*((z0-zglib)/dist)
-                    #     #heats[l] = (zglib-zgl)*(z0-zglib)*n2[d[11:-1]==z0][0]
-                    #     #heats[l]=n2[d[11:-1]==z0]*q
-                    # else:
-                    #     heats[l]=np.nan
+                    if zpyc>zglib and zglib > zgl:
+                        heats[l]=abs(zpyc)-abs(zglib)
+                    else:
+                        heats[l]=np.nan
                 else:
                     heats[l]=np.nan
 
@@ -336,3 +417,144 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,debu
         ax.add_collection(lc)
         plt.show()
     return heats
+
+def tempFromClosestPointSimple(bedmap,grid,physical,baths,closest_points,sal,temp,debug=False,method="default"):
+    print("temp from closest point")
+    heats=[np.nan]*len(baths)
+    stx = sal.coords["x"].values
+    sty = sal.coords["y"].values
+    salvals,tempvals = sal.s_an.values[0,:,:,:],temp.t_an.values[0,:,:,:]
+    d  = sal.depth.values
+    mask = np.zeros(salvals.shape[1:])
+    mask[:]=np.inf
+    for l in range(salvals.shape[1]):
+        for k in range(salvals.shape[2]):
+            if np.sum(~np.isnan(salvals[:,l,k]))>0 and np.max(d[~np.isnan(salvals[:,l,k])])>2000:
+                mask[l,k] = 1
+    count = 0
+    lines = []
+    bedvalues = bedmap.bed.values
+    for l in tqdm(range(int(len(closest_points)))):
+        if ~np.isnan(closest_points[l]).any():
+            count+=1
+            centroid = [bedmap.coords["x"].values[grid[l][1]],bedmap.coords["y"].values[grid[l][0]]]
+            rdist = np.sqrt((sal.coords["x"]-centroid[0])**2 + (sal.coords["y"]- centroid[1])**2)*mask
+            closest=np.unravel_index(rdist.argmin(), rdist.shape)
+            x = stx[closest[0],closest[1]]
+            y = sty[closest[0],closest[1]]
+            t = tempvals[:,closest[0],closest[1]]
+            s = salvals[:,closest[0],closest[1]]
+            line = ([physical[l][0],physical[l][1]],[x,y])
+            dist = np.sqrt((physical[l][0]-x)**2 + (physical[l][1]-y)**2)
+            if ~(np.isnan(line).any()):
+                lines.append(line)
+            tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
+            # plt.scatter(t,d)
+            # plt.plot(tinterp(d),d)
+            # print(tinterp(d))
+            # plt.show()
+            if ~(np.isnan(line).any()):
+                lines.append(line)
+            if np.isnan(t[11:]).all():
+                heats[l]=np.nan
+            elif np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
+                heats[l]=heat_content((tinterp,sinterp),baths[l],6000,0)#*((baths[l]-bedvalues[grid[l][1],grid[1][0]])/(dist))
+    if debug:
+        fig, ax = plt.subplots()
+        lc = mc.LineCollection(lines, colors="red", linewidths=2)
+        #ax.imshow(bedvalues)
+        plt.xlim(-10**7,10**7)
+        plt.ylim(-10**7,10**7)
+        ax.add_collection(lc)
+        plt.show()
+    return heats
+
+def tempProfileByShelf(bedmap,grid,physical,depths,closest_points,sal,temp,shelf_keys,debug=False,method="default"):
+    print("temp from closest point")
+    stx = sal.coords["x"].values
+    sty = sal.coords["y"].values
+    salvals,tempvals = sal.s_an.values[0,:,:,:],temp.t_an.values[0,:,:,:]
+    d  = sal.depth.values
+    mask = np.zeros(salvals.shape[1:])
+    mask[:]=np.inf
+    for l in range(salvals.shape[1]):
+        for k in range(salvals.shape[2]):
+            if np.sum(~np.isnan(salvals[:,l,k]))>2 and np.max(d[~np.isnan(salvals[:,l,k])])>1500:
+                mask[l,k] = 1
+    count = 0
+    lines = []
+    bedvalues = bedmap.bed.values
+    tempprofs = []
+    salprofs = []
+    for l in tqdm(range(int(len(closest_points)))):
+        if ~np.isnan(closest_points[l]).any():
+            count+=1
+            centroid = [bedmap.coords["x"].values[grid[l][1]],bedmap.coords["y"].values[grid[l][0]]]
+            rdist = np.sqrt((sal.coords["x"]-centroid[0])**2 + (sal.coords["y"]- centroid[1])**2)*mask
+            rdist[np.where(rdist<250000)]=np.inf
+            closest=np.unravel_index(rdist.argmin(), rdist.shape)
+            x = stx[closest[0],closest[1]]
+            y = sty[closest[0],closest[1]]
+            t = tempvals[:,closest[0],closest[1]]
+            s = salvals[:,closest[0],closest[1]]
+            line = ([physical[l][0],physical[l][1]],[x,y])
+            dist = np.sqrt((physical[l][0]-x)**2 + (physical[l][1]-y)**2)
+            if ~(np.isnan(line).any()):
+                lines.append(line)
+            #tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
+            tempprofs.append(t)
+            salprofs.append(s)
+            line = ([x,y],[centroid[0],centroid[1]])
+    tempprofs = np.asarray(tempprofs)
+    salprofs = np.asarray(salprofs)
+    prof_dict = {}
+    shelf_keys = np.asarray(shelf_keys)
+    shelf_keys[shelf_keys==None] = "None"
+
+    fig, ax = plt.subplots()
+    lc = mc.LineCollection(lines, colors="red", linewidths=2)
+    #ax.imshow(bedvalues)
+    plt.xlim(-10**7,10**7)
+    plt.ylim(-10**7,10**7)
+    ax.add_collection(lc)
+    plt.show()
+
+    for k in np.unique(shelf_keys):
+        if k !="None":
+            t = np.mean(tempprofs[shelf_keys==k],axis=0)
+            s = np.mean(salprofs[shelf_keys==k],axis=0)
+            idd = np.nanmin(np.asarray(depths)[shelf_keys==k])
+            prof_dict[k] = (t,s,d,idd)
+    return prof_dict
+
+def GLIB_by_shelf(GLIB,bedmach,polygons):
+    GLIBmach = bedmach.bed.copy(deep=True)
+    GLIBmach.values[:] = GLIB[:]
+    GLIBmach = GLIBmach.rio.write_crs("epsg:3031")
+    print(GLIBmach)
+    del GLIBmach.attrs['grid_mapping']
+    GLIBmach.rio.to_raster("data/glibmach.tif")
+
+    glib_by_shelf = {}
+    for k in tqdm(polygons.keys()):
+        raster = riox.open_rasterio('data/glibmach.tif')
+        gons = []
+        parts = polygons[k][1]
+        polygon = polygons[k][0]
+        if len(parts)>1:
+            parts.append(-1)
+            for l in range(0,len(parts)-1):
+                poly_path=shapely.geometry.Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T).buffer(10**4)
+                gons.append(poly_path)
+        else:
+            gons = [polygon]
+        print(k)
+        print("made it hearE")
+        clipped = raster.rio.clip(gons)
+        if k == "Ronne":
+            plt.imshow(clipped[0])
+            plt.show()
+        glib_by_shelf[k] = np.nanmean(np.asarray(clipped[0])[clipped>-9000])
+        print(glib_by_shelf[k])
+    return glib_by_shelf
+ 

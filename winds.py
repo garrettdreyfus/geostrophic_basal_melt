@@ -3,6 +3,7 @@ import pyproj
 import numpy as np
 import pickle
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 
 
@@ -17,16 +18,15 @@ def AMPS_wind(polygons,fname,icemask):
     #zonal_winds = zonal_winds[:,:,[10,11,0,1],1]#np.nanmean(zonal_winds,axis=3)
     zonal_winds = np.nanmean(zonal_winds,axis=2)
     merid_winds = mat["merid_winds_AMPS"]
-    merid_winds = merid_winds[:,:,[10,11,0,1],2]#np.nanmean(merid_winds,axis=3)
+    merid_winds = merid_winds[:,:,[6,7,8,9],2]#np.nanmean(merid_winds,axis=3)
     merid_winds = np.nanmean(merid_winds,axis=2)
     winds_by_shelf = {}
-    for k in polygons.keys():
+    for k in tqdm(polygons.keys()):
         centroid = list(polygons[k][0].centroid.coords)[0]
         dist = np.sqrt((x- centroid[0])**2 + (y- centroid[1])**2)
         radius=250*10**3
-        #windmean = np.nanmean(zonal_winds[dist<radius])
         z = np.nanmean(zonal_winds[dist<radius])
         m = np.nanmean(merid_winds[dist<radius])
         a = np.arctan2(m,z)
-        winds_by_shelf[k] = m#np.degrees(a)#np.nanmean(np.degrees(a))
+        winds_by_shelf[k] = z#np.degrees(a)#np.nanmean(np.degrees(a))
     return winds_by_shelf

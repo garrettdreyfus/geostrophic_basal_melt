@@ -1,25 +1,35 @@
 import bathtub as bt
+import shapely
 import pickle
 import GLIB
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.tree import DecisionTreeRegressor
+from sklearn import preprocessing
+from sklearn import tree
 import numpy as np
+from sklearn.metrics import r2_score
 import woa
 import cdw
+from tqdm import tqdm
+import xarray as xr
+import winds as wind
 
 # Create GLIB
 
 writeBedMach = False
 writeGLIB = False
 writePolygons = False
-writeGL = False
+writeGL =False
 createWOA = False
 createClosestWOA = False
 
 ###############################################
 if writeBedMach:
     print("Grabbing BedMachine Data")
-    bedmach = bt.convert_bedmachine("data/BedMachine.nc",coarsenfact=4)
+    bedmach = bt.convert_bedmachine("data/BedMachine.nc",coarsenfact=1)
     with open("data/bedmach.pickle","wb") as f:
         pickle.dump(bedmach,f)
 
@@ -42,7 +52,6 @@ if writeGLIB:
 
 with open("data/bedmachGLIB.pickle","rb") as f:
     GLIB = pickle.load(f)
-
 
 ##################################################
 
@@ -164,4 +173,3 @@ for k in hubheats_by_shelf.keys():
 ax1.scatter(hubheats,melts)
 ax2.scatter(glheats,melts)
 plt.show()
-

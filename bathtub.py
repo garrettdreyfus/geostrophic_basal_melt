@@ -3,15 +3,20 @@ import sys
 import rockhound as rh
 import matplotlib.pyplot as plt
 import cmocean
+import copy
 import numpy as np
 import itertools
 import pickle
 from tqdm import tqdm
 from shapely.geometry import Polygon, Point
+import matplotlib
+import shapely
 import time
 from scipy.ndimage import label 
 from scipy.ndimage import binary_dilation as bd
 import xarray as xr
+import rioxarray as riox
+import rasterio
 
 def PolyArea(x,y):
     return 0.5*np.abs(np.dot(x,np.roll(y,1))-np.dot(y,np.roll(x,1)))
@@ -59,6 +64,60 @@ def save_polygons():
     with open("data/shelfpolygons.pickle","wb") as f:
         pickle.dump(polygons,f)
 
+def PolyArea(x,y):
+    return 0.5*np.abs(np.dot(x,np.roll(y,1))-np.dot(y,np.roll(x,1)))
+
+def shelf_mass_loss(dsfname,polygons,firstrun=False):
+    if firstrun:
+        melts = xr.open_dataset(dsfname)
+        melts["phony_dim_1"] = melts.x.T[0]
+        melts["phony_dim_0"] = melts.y.T[0]
+        melts = melts.drop_vars(["x","y"])
+        melts = melts.rename({"phony_dim_1":"x","phony_dim_0":"y"})
+        melts.rio.to_raster("data/amundsilli.tif")
+        print(melts)
+    melt_rates = {}
+    for k in tqdm(polygons.keys()):
+        raster = riox.open_rasterio('data/amundsilli.tif')
+        raster = raster.rio.write_crs("epsg:3031")
+        gons = []
+        parts = polygons[k][1]
+        polygon = polygons[k][0]
+        if len(parts)>1:
+            parts.append(-1)
+            for l in range(0,len(parts)-1):
+                poly_path=shapely.geometry.Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T)
+                gons.append(poly_path)
+        else:
+            gons = [polygon]
+        print(k)
+        print("made it hearE")
+        clipped = raster.rio.clip(gons,from_disk=True)
+        melt_rates[k] = np.nanmean(clipped[0])
+        del clipped
+
+    return melt_rates
+
+
+    
+def shelf_areas():
+    myshp = open("regions/IceBoundaries_Antarctica_v02.shp", "rb")
+    mydbf = open("regions/IceBoundaries_Antarctica_v02.dbf", "rb")
+    myshx = open("regions/IceBoundaries_Antarctica_v02.shx", "rb")
+    r = shapefile.Reader(shp=myshp, dbf=mydbf, shx=myshx)
+    s = r.shapes()
+    records = r.shapeRecords()
+    polygons =  {}
+    for i in range(len(s)):
+        l = s[i]
+        name = records[i].record[0]
+        kind = records[i].record[3]
+        output = []
+        if l.shapeTypeName == 'POLYGON' and kind== "FL":
+            xs, ys = zip(*l.points)
+            polygons[name] = PolyArea(xs,ys)
+    return polygons
+
 def closest_shelf(coord,polygons):
     min_dist = 1000
     closestname = None
@@ -72,7 +131,7 @@ def closest_shelf(coord,polygons):
     return closestname, closestpolygon, min_dist
 
 
-def get_line_points(shelf,polygons,debug=False):
+def get_line_points(shelf,polygons,debug=False,mode="grounding"):
     margin_coords = []
     mx = []
     my = []
@@ -88,10 +147,12 @@ def get_line_points(shelf,polygons,debug=False):
     for k in polygons.keys():
         shelves[k] = []
     print("Grabbing grounding line points")
-
-    iceexpand = bd(icemask==0)
-    glline = np.logical_and(iceexpand==1,icemask!=0)
-    glline = icemask ==1
+    if mode == "grounding":
+        iceexpand = bd(icemask==0)
+        glline = np.logical_and(iceexpand==1,icemask!=0)
+    if mode == "edge":
+        iceexpand = bd(icemask==1)
+        glline = np.logical_and(iceexpand==1,np.isnan(icemask))
     shelf_keys = []
 
     for i in tqdm(range(1,icemask.shape[0]-1)):
@@ -104,12 +165,14 @@ def get_line_points(shelf,polygons,debug=False):
                 shelf_keys.append(cn)
                 grid_indexes.append([i,j])
                 depths.append(beddepth[i,j])
-    pc = np.asarray(physical_cords)
+    pc = np.asarray(grid_indexes)
     if debug:
-        plt.scatter(pc.T[0],pc.T[1])
+        plt.imshow(icemask)
+        plt.scatter(pc.T[1],pc.T[0])
         for cn in shelves.keys():
             xy = np.asarray(shelves[cn]).T
-            plt.scatter(xy[0],xy[1])
+            if len(xy)>0:
+                plt.scatter(xy[0],xy[1])
         plt.show()
     return physical_cords, grid_indexes, depths,shelves,shelf_keys
 
@@ -122,7 +185,7 @@ def trimDataset(bm,xbounds,ybounds):
     shelf = shelf.where(shelf.y>ybounds[0],drop=True)
     return shelf
 
-def convert_bedmachine(fname,coarsenfact=4):
+def convert_bedmachine(fname,coarsenfact=1):
     bedmach = xr.open_dataset(fname)
     plt.imshow(bedmach.bed.values,vmin=-600,vmax=-200)
 
@@ -151,4 +214,33 @@ def shelf_sort(shelf_keys,quant):
     return shelf_dict
 
  
+def shelf_numbering(polygons,bed):
+    shelf_count=1
+    shelf_number_labels = {}
+
+    mach = bed.icemask_grounded_and_shelves.copy(deep=True)
+    shelf_numbers = bed.icemask_grounded_and_shelves.copy(deep=True).values
+    mach = mach.rio.write_crs("epsg:3031")
+
+    del mach.attrs['grid_mapping']
+    mach.rio.to_raster("data/shelfnumberraster.tif")
+
+    for k in tqdm(polygons.keys()):
+        gons = []
+        parts = polygons[k][1]
+        polygon = polygons[k][0]
+        if len(parts)>1:
+            parts.append(-1)
+            for l in range(0,len(parts)-1):
+                poly_path=shapely.geometry.Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T).buffer(10**4)
+                gons.append(poly_path)
+        else:
+            gons = [polygon]
+
+        raster = riox.open_rasterio('data/shelfnumberraster.tif')
+        x = raster.rio.clip(gons,drop=False)
+        shelf_numbers[np.where(x[0]==1)]=shelf_count
+        shelf_number_labels[k]=shelf_count
+        shelf_count+=1
+    return shelf_number_labels, shelf_numbers
 
