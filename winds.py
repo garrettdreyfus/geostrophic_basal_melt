@@ -21,7 +21,7 @@ def AMPS_wind(polygons,fname,icemask):
     merid_winds = np.nanmean(merid_winds,axis=2)
     winds_by_shelf = {}
     for k in polygons.keys():
-        centroid = list(polygons[k].centroid.coords)[0]
+        centroid = list(polygons[k][0].centroid.coords)[0]
         dist = np.sqrt((x- centroid[0])**2 + (y- centroid[1])**2)
         radius=250*10**3
         #windmean = np.nanmean(zonal_winds[dist<radius])

@@ -108,3 +108,22 @@ def calcMSD(depth,ice,slice_depth,points_of_interest,resolution=5,debug=False):
     # plt.colorbar()
     # plt.show()
     return MSD
+
+def MSDGLIB(bed,grid,MSDS,depths):
+    glibs= np.ones(MSDS.shape[1],dtype=float)
+    glibs[:]=np.nan
+    print(MSDS.shape)
+    depths = np.asarray(depths)
+    for l in tqdm(range(MSDS.shape[1])):
+        count=0
+        d1=0
+        m = MSDS[:,l]
+        thresh = 1
+        if ~(m>thresh).any():
+            glibs[l]=bed[grid[l][0],grid[l][1]]
+        else:
+            glibs[l]=depths[m>thresh][0]
+    return glibs
+        
+
+

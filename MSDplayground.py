@@ -11,7 +11,8 @@ from bathtub import get_line_points, shelf_sort
 import copy
 from matplotlib import colors
 from scipy.ndimage import binary_dilation as bd
-from cdw import extract_rignot_massloss
+from cdw import extract_rignot_massloss2013
+
 from GLIB import *
 from MSD import *
 
@@ -64,23 +65,42 @@ with open("data/MSDS.pickle","rb") as f:
 depths = np.asarray(range(-800,0,20))
 #for l in range(10000):#MSDS.shape[1]):
     # plt.plot(MSDS[:,l],depths-GLIB[glpoints[l][0],glpoints[l][1]])
+
+with open("data/MSDGLIB.pickle","wb") as f:
+   pickle.dump(MSDGLIB(depth,glpoints,MSDS,depths),f)
+with open("data/MSDGLIB.pickle","rb") as f:
+    MSDGLIB = pickle.load(f)
+print("made msd glib")
+
+    
 slopes = []
 glibs = []
 numbernans=[]
+
+with open("data/shelf_massloss.pickle","rb") as f:
+   shc_GLIB = pickle.load(f)
+
 for l in tqdm(range(MSDS.shape[1])):
     deltas = depths-GLIB[glpoints[l][0],glpoints[l][1]]
     glibs.append(GLIB[glpoints[l][0],glpoints[l][1]])
     count=0
     d1=0
-    for step in range(2):
-        if np.argmin(np.abs(deltas))+step<MSDS.shape[0]:
+    widths = []
+    zs = []
+    for step in range(10):
+        if np.argmin(np.abs(deltas))+step<MSDS.shape[0]-1:
             m = MSDS[:,l][np.argmin(np.abs(deltas))+step]
             if ~np.isnan(m):
                 count+=1
+                widths.append(m)
+                zs.append(depths[np.argmin(np.abs(deltas))+step])
                 d1 += m
+    if len(widths)>0 and False:
+        plt.plot(widths,zs)
+        plt.show()
     numbernans.append((40-np.argmin(np.abs(deltas)))-count)
     if count != 0:
-        slopes.append(d1)
+        slopes.append(d1/count)
     else:
         slopes.append(np.nan)
 
@@ -90,29 +110,34 @@ for l in tqdm(range(MSDS.shape[1])):
 slopes_by_shelf = shelf_sort(shelf_keys,slopes)
 glibs_by_shelf = shelf_sort(shelf_keys,glibs)
 glpoints_by_shelf = shelf_sort(shelf_keys,glpoints)
-rignot_shelf_massloss,rignot_shelf_areas,sigma = extract_rignot_massloss("data/rignot2019.xlsx")
-xs,ys,melts=[],[],[]
-with open("data/shelf_massloss.pickle","rb") as f:
-   shelf_heat_content_byshelf_GLIB = pickle.load(f)
+msdglib_by_shelf = shelf_sort(shelf_keys,MSDGLIB)
+#rignot_shelf_massloss,rignot_shelf_areas,sigma = extract_rignot_massloss("data/rignot2019.xlsx")
+#rignot_shelf_massloss,rignot_shelf_areas,sigma = extract_rignot_massloss("data/rignot2019.xlsx")
+rignot_shelf_massloss,rignot_shelf_areas,sigma = extract_rignot_massloss2013("data/rignot2013.xlsx")
+xs,ys,mglibs,melts=[],[],[],[]
 
 shelf_names = []
 lengths = []
 
-plt.imshow(depth,vmin=-600,vmax=-200)
-for i in range(len(glpoints_by_shelf["Ferrigno"])):
-    l = glpoints_by_shelf["Ferrigno"][i]
-    c = slopes_by_shelf["Ferrigno"][i]
-    plt.scatter(l[1],l[0],c)
-plt.show()
+#plt.imshow(depth,vmin=-600,vmax=-200)
+#for i in range(len(glpoints_by_shelf["Ferrigno"])):
+    #l = glpoints_by_shelf["Ferrigno"][i]cdw.
+    #c = slopes_by_shelf["Ferrigno"][i]
+    #plt.scatter(l[1],l[0],c)
+#plt.show()
     
 #fig = plt.figure(figsize = (10, 7))
 #ax = plt.axes(projection ="3d")
 for k in slopes_by_shelf.keys():
     if k in rignot_shelf_massloss:
-        x,y = np.nanmean(shelf_heat_content_byshelf_GLIB[k]),np.nanmean(slopes_by_shelf[k])
-        c = rignot_shelf_massloss[k]/len(glpoints_by_shelf[k])
+        print(k)
+        x = np.nanmean(glibs_by_shelf[k])
+        y = np.nanmean(slopes_by_shelf[k])
+        mglib = np.nanmean(msdglib_by_shelf[k])
+        mglibs.append(mglib)
+        c = float(rignot_shelf_massloss[k])
         lengths.append(len(slopes_by_shelf[k]))
-        xs.append(float(x))
+        xs.append(x)
         ys.append(y)
         melts.append(float(c))
         shelf_names.append(k)
@@ -122,7 +147,9 @@ print(len(xs))
 print(len(melts))
 print(len(glpoints_by_shelf["Fox"]),slopes_by_shelf["Fox"])
 print(len(glpoints_by_shelf["Ferrigno"]),slopes_by_shelf["Ferrigno"])
-plt.scatter(np.asarray(ys),melts,c=xs,cmap="rainbow")
+#plt.scatter(np.asarray(ys),melts,c=xs,cmap="rainbow")
+#plt.scatter(np.asarray(xs),melts,c=xs,cmap="rainbow")
+plt.scatter(mglibs,melts,c=xs,cmap="rainbow")
 plt.colorbar()
 plt.show()
 # #plt.scatter(xs,ys)

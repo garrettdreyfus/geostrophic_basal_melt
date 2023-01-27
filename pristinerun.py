@@ -66,6 +66,7 @@ if writeGL:
 with open("data/groundinglinepoints.pickle","rb") as f:
     physical,grid,depths,shelves,shelf_keys = pickle.load(f)
 
+
 # randomcmap = ListedColormap(np.random.rand ( 256,3))
 # plt.imshow(GLIB,cmap=randomcmap)
 # grid = np.asarray(grid)
@@ -97,7 +98,7 @@ with open("data/woawithbed.pickle","rb") as f:
     sal,temp = pickle.load(f)
 
 if createClosestWOA:
-    closest_points = cdw.closest_WOA_points(grid,baths,bedmach)
+    closest_points = cdw.closest_WOA_points(grid,baths,bedmach,method="simple")
     with open("data/closest_points.pickle","wb") as f:
         pickle.dump(closest_points,f)
 with open("data/closest_points.pickle","rb") as f:
@@ -109,40 +110,58 @@ glibs = []
 for l in range(len(baths)):
     depths.append(bedvalues[grid[l][0],grid[l][1]])
     glibs.append(baths[l])
-    if np.isnan(baths[l]):
-        baths[l]=bedvalues[grid[l][0],grid[l][1]]
+    #if np.isnan(baths[l]):
+        #baths[l]=bedvalues[grid[l][0],grid[l][1]]
 
+with open("data/MSDGLIB.pickle","rb") as f:
+    glibs = pickle.load(f)
+
+
+areas = bt.shelf_areas()
+
+baths=glibs
+#
 glibheats =  cdw.tempFromClosestPoint(bedmach,grid,physical,baths,closest_points,sal,temp)
+glibheats_by_shelf = bt.shelf_sort(shelf_keys,glibheats)
+
+glheats =  cdw.tempFromClosestPoint(bedmach,grid,physical,depths,grid,sal,temp)
+glheats_by_shelf = bt.shelf_sort(shelf_keys,glheats)
+with open("data/shelf_massloss.pickle","wb") as f:
+    pickle.dump([glibheats_by_shelf,glheats_by_shelf],f)
+with open("data/shelf_massloss.pickle","rb") as f:
+    hubheats_by_shelf,glheats_by_shelf = pickle.load(f)
+
 physical = np.asarray(physical)
-slopes_by_shelf = bt.shelf_sort(shelf_keys,glibheats)
 gldepths_by_shelf = bt.shelf_sort(shelf_keys,depths)
 glibs_by_shelf = bt.shelf_sort(shelf_keys,glibs)
 rignot_shelf_massloss,rignot_shelf_areas,sigma = cdw.extract_rignot_massloss("data/rignot2019.xlsx")
 
-with open("data/shelf_massloss.pickle","wb") as f:
-    pickle.dump(slopes_by_shelf,f)
 
-xs=[]
+hubheats=[]
+glheats = []
 ys = []
 zs = []
 znews= [] 
+melts = []
 
 with open("data/MSDS.pickle","rb") as f:
     MSDS = pickle.load(f)
-for k in slopes_by_shelf.keys():
-    if k in rignot_shelf_massloss:
-        x = np.nanmean(slopes_by_shelf[k])
-        z = np.nanmean(gldepths_by_shelf[k])
-        c = rignot_shelf_massloss[k]/len(slopes_by_shelf[k])#/rignot_shelf_areas[k]
-        xs.append(x)
-        ys.append(c)
-        zs.append(z)
-        znews.append(np.nanmean(glibs_by_shelf[k]))
-        plt.annotate(k,(x,c))
 
-plt.xlabel("Average degrees C above freezing within 200m above HUB")
-plt.ylabel("Rignot 2019 massloss divided by grounding line length")
-plt.scatter(xs,ys,c=znews,cmap="jet")
-plt.colorbar()
+winds_by_shelf = winds.AMPS_wind(polygons,"data/AMPS_winds.mat",icemask)
+
+fig, (ax1,ax2) = plt.subplots(1,2)
+for k in hubheats_by_shelf.keys():
+    if k in rignot_shelf_massloss:
+        hubheat = np.nanmean(hubheats_by_shelf[k])
+        glheat = np.nanmean(glheats_by_shelf[k])
+        melt = rignot_shelf_massloss[k]/np.sqrt(areas[k])
+        hubheats.append(hubheat)
+        glheats.append(glheat)
+        melts.append(melt)
+        ax1.annotate(k,(hubheat,melt))
+        ax2.annotate(k,(glheat,melt))
+
+ax1.scatter(hubheats,melts)
+ax2.scatter(glheats,melts)
 plt.show()
 

@@ -1,4 +1,5 @@
 import xarray
+import xarray as xr
 import pyproj
 import numpy as np
 import rockhound as rh
@@ -37,3 +38,9 @@ def create_WOA(bed,debug = False):
    sal.icemask.values[sal.icemask.values<1]=0
    temp.icemask.values[temp.icemask.values<1]=0
    return sal,temp
+
+
+sal = xr.open_dataset("data/woa18_decav81B0_s00_04.nc",decode_times=False)
+sal = sal.sel(depth=2000,drop=True)
+sal = sal.isel(time=0,drop=True)
+print(sal)

@@ -23,16 +23,53 @@ from tqdm.contrib.concurrent import process_map
 from scipy.ndimage import binary_dilation as bd
 from scipy.ndimage import label 
 
+def quad_local_param(thermal_forcing):
+    
+    """
+    Apply the quadratic local parametrization.
+    
+    This function computes the basal melt based on a quadratic local parametrization (based on Favier et al., 2019 or DeConto and Pollard, 2016), revisited in Burgard et al. 2021.
+    
+    Parameters
+    ----------
+    gamma : scalar
+        Heat exchange velocity in m per second
+    melt_factor : scalar 
+        Melt factor representing (rho_sw*c_pw) / (rho_i*L_i) in :math:`\mathtt{K}^{-1}`.
+    thermal_forcing: scalar or array
+        Difference between T and the freezing temperature Tf (T-Tf) in K or degrees C
+    U_factor : scalar or array
+        Factor introduced to emulate the speed of the current, see function calculate_melt_rate_2D_simple_1isf.
+    Returns
+    -------
+    melt : scalar or array
+        Melt rate in m ice per second
+    """
+    rho_sw = 1028. # kg m-3
+    c_po = 3974. # J kg-1 K-1
+    rho_i = 917. # kg m-3
+    L_i = 3.34 * 10**5# J kg-1
+    rho_fw = 1000.
+
+    gamma = 5.9*10**-4
+
+    melt_factor = (rho_sw * c_po) / (rho_i * L_i) # K-1
+
+    U_factor=melt_factor
+    
+    melt = (gamma * melt_factor * U_factor * thermal_forcing * abs(thermal_forcing))*(31536000)
+    return melt 
+
 def heat_content(heat_function,depth,plusminus):
     #heat = gsw.cp_t_exact(s,t,d)
     depth = np.abs(depth)
     #xnew= np.arange(50,min(depth+0,5000))
     #xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,5000))
-    xnew= np.arange(max(0,depth-200),depth)
+    xnew= np.arange(max(0,depth-plusminus),depth)
     #print(xnew,depth,max(d))
     ynew = heat_function[0](xnew)
     #xnew,ynew = xnew[ynew>0],ynew[ynew>0]
-    ynew = ynew - gsw.CT_freezing(heat_function[1](xnew),xnew,0)
+    ynew = ynew - gsw.CT_freezing(heat_function[1](xnew),xnew,depth)
     #return np.nansum(ynew>1.2)/np.sum(~np.isnan(ynew))
     if len(ynew)>0:
         return np.trapz(ynew,xnew)/len(xnew)
@@ -86,6 +123,25 @@ def extract_rignot_massloss(fname):
             
     return rignot_shelf_massloss, rignot_shelf_areas,sigma
 
+def extract_rignot_massloss2013(fname):
+    dfs = pd.read_excel(fname,sheet_name=None)
+    dfs = dfs['Sheet1']
+    print(dfs)
+    print(dfs.keys())
+    rignot_shelf_massloss={}
+    rignot_shelf_areas = {}
+    sigma = {}
+    for l in range(len(dfs["Ice Shelf Name"])):
+        if  dfs["Ice Shelf Name"][l]:
+            try:
+                i = dfs["B my"][l].index("±")
+                rignot_shelf_massloss[dfs["Ice Shelf Name"][l]] = dfs["B my"][l][:i]
+                rignot_shelf_areas[dfs["Ice Shelf Name"][l]] = dfs["Actual area"][l]
+            except:
+                1+1
+    return rignot_shelf_massloss, rignot_shelf_areas,sigma
+
+
 
 # llset = open_CtlDataset('data/polynall.ctl')
 # projection = pyproj.Proj("epsg:3031")
@@ -135,7 +191,7 @@ def closest_point_pfun(grid,bedvalues,icemask,bordermask,baths,l):
         return (np.nan,np.nan)
 
 
-def closest_WOA_points(grid,baths,bedmach,debug=False):
+def closest_WOA_points_bfs(grid,baths,bedmach,debug=False):
     bedvalues = bedmach.bed.values
     icemask = bedmach.icemask_grounded_and_shelves.values
     closest_points=[np.nan]*len(baths)
@@ -169,6 +225,35 @@ def closest_WOA_points(grid,baths,bedmach,debug=False):
         ax.add_collection(lc)
         plt.show()
     return closest_points
+
+
+def nearest_nonzero_idx_v2(a,x,y):
+    tmp = a[x,y]
+    a[x,y] = 0
+    r,c = np.nonzero(a)
+    a[x,y] = tmp
+    min_idx = ((r - x)**2 + (c - y)**2).argmin()
+    return r[min_idx], c[min_idx]
+
+def closest_WOA_points_simple(grid,baths,bedmach,debug=False):
+    bedvalues = bedmach.bed.values
+    icemask = bedmach.icemask_grounded_and_shelves.values
+    closest_points=[np.nan]*len(baths)
+    depthmask = bedvalues>-2300
+    insidedepthmask = bedvalues<-1900
+    bordermask = np.logical_and(insidedepthmask,depthmask)
+    bordermask = np.logical_and(bordermask,np.isnan(icemask))
+    itertrack = []
+    closest = []
+    for l in tqdm(range(len(grid))):
+        closest.append(nearest_nonzero_idx_v2(bordermask,grid[l][0],grid[l][1]))
+    return closest
+
+def closest_WOA_points(grid,baths,bedmach,debug=False,method="simple"):
+    if method=="bfs":
+        return closest_WOA_points_bfs(grid,baths,bedmach,debug=False)
+    elif method=="simple":
+        return closest_WOA_points_simple(grid,baths,bedmach,debug=False)
 
 def running_mean(x, N):
     cumsum = np.nancumsum(np.insert(x, 0, 0)) 
@@ -207,7 +292,7 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,debu
                 if np.isnan(t[11:]).all():
                     heats[l]=np.nan
                 elif np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
-                    heats[l]=heat_content((tinterp,sinterp),baths[l],100)
+                    heats[l]=heat_content((tinterp,sinterp),baths[l],200)
             elif method=="a":
                 zglib = baths[l]
                 zgl = bedvalues[grid[l][0],grid[l][1]]
@@ -227,16 +312,18 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,debu
                         #z0 = np.median(t)
                     else:
                         z0=np.nanmin(d[11:])
-                    if zpyc>zglib and zglib > zgl:
-                        #q = (z0-zglib)*(z0-zgl)
-                        #q = (z0-zglib)#*zglib
-                        heats[l]=abs(zglib)-abs(z0)
-                        #heats[l]=(-z0-zglib)*(zglib-zgl)
-                        #heats[l]=(z0-zglib)*((z0-zglib)/dist)
-                        #heats[l] = (zglib-zgl)*(z0-zglib)*n2[d[11:-1]==z0][0]
-                        #heats[l]=n2[d[11:-1]==z0]*q
-                    else:
-                        heats[l]=np.nan
+
+                    heats[l]=abs(zglib)-abs(z0)
+                    # if zpyc>zglib and zglib > zgl:
+                    #     #q = (z0-zglib)*(z0-zgl)
+                    #     #q = (z0-zglib)#*zglib
+                    #     heats[l]=abs(zglib)-abs(z0)
+                    #     #heats[l]=(-z0-zglib)*(zglib-zgl)
+                    #     #heats[l]=(z0-zglib)*((z0-zglib)/dist)
+                    #     #heats[l] = (zglib-zgl)*(z0-zglib)*n2[d[11:-1]==z0][0]
+                    #     #heats[l]=n2[d[11:-1]==z0]*q
+                    # else:
+                    #     heats[l]=np.nan
                 else:
                     heats[l]=np.nan
 
@@ -244,8 +331,8 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,debu
         fig, ax = plt.subplots()
         lc = mc.LineCollection(lines, colors="red", linewidths=2)
         #ax.imshow(bedvalues)
-        plt.xlim(-10**6,10**6)
-        plt.ylim(-10**6,10**6)
+        plt.xlim(-10**7,10**7)
+        plt.ylim(-10**7,10**7)
         ax.add_collection(lc)
         plt.show()
     return heats
