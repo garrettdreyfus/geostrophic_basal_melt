@@ -8,6 +8,7 @@ from tqdm import tqdm
 import pickle
 import rioxarray as riox
 import rasterio
+from matplotlib.collections import PatchCollection
 import shapely
 
 def create_WOA(bed,debug = False):
@@ -78,6 +79,10 @@ def create_WOA(bed,debug = False):
 #with open("data/shelfpolygons.pickle","rb") as f:
     #polygons = pickle.load(f)
 #
+
+raster = riox.open_rasterio('data/woa.tif')
+plt.imshow(raster.values[0])
+plt.show()
 #for k in tqdm(polygons.keys()):
     #if k == "Ronne":
         #raster = riox.open_rasterio('data/woa.tif')
@@ -105,3 +110,5 @@ def create_WOA(bed,debug = False):
 ##
 ##sal.s_an[0,:,:].plot.pcolormesh()
 ##plt.show()
+
+
