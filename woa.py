@@ -1,4 +1,5 @@
 import xarray
+import xarray as xr
 import pyproj
 import numpy as np
 import rockhound as rh
@@ -43,6 +44,10 @@ def create_WOA(bed,debug = False):
    return sal,temp
 
 
+sal = xr.open_dataset("data/woa18_decav81B0_s00_04.nc",decode_times=False)
+sal = sal.sel(depth=2000,drop=True)
+sal = sal.isel(time=0,drop=True)
+print(sal)
 #salfname,tempfname = "data/woa18_decav81B0_s00_04.nc","data/woa18_decav81B0_t00_04.nc"
 #sal = xarray.open_dataset(salfname,decode_times=False)
 #sal = sal.sel(depth=0,drop=True)
@@ -110,5 +115,3 @@ plt.show()
 ##
 ##sal.s_an[0,:,:].plot.pcolormesh()
 ##plt.show()
-
-

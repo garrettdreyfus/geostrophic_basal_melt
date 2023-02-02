@@ -18,6 +18,29 @@ import xarray as xr
 import rioxarray as riox
 import rasterio
 
+def PolyArea(x,y):
+    return 0.5*np.abs(np.dot(x,np.roll(y,1))-np.dot(y,np.roll(x,1)))
+
+def shelf_areas():
+    myshp = open("regions/IceBoundaries_Antarctica_v02.shp", "rb")
+    mydbf = open("regions/IceBoundaries_Antarctica_v02.dbf", "rb")
+    myshx = open("regions/IceBoundaries_Antarctica_v02.shx", "rb")
+    r = shapefile.Reader(shp=myshp, dbf=mydbf, shx=myshx)
+    s = r.shapes()
+    records = r.shapeRecords()
+    print(records[0])
+    polygons =  {}
+    for i in range(len(s)):
+        l = s[i]
+        name = records[i].record[0]
+        kind = records[i].record[3]
+        output = []
+        if l.shapeTypeName == 'POLYGON' and kind== "FL":
+            xs, ys = zip(*l.points)
+            area = PolyArea(xs,ys)
+            polygons[name] = area
+    return polygons
+ 
 
 def save_polygons():
     myshp = open("regions/IceBoundaries_Antarctica_v02.shp", "rb")
@@ -26,6 +49,7 @@ def save_polygons():
     r = shapefile.Reader(shp=myshp, dbf=mydbf, shx=myshx)
     s = r.shapes()
     records = r.shapeRecords()
+    print(records)
     polygons =  {}
     for i in range(len(s)):
         l = s[i]
@@ -123,7 +147,6 @@ def get_line_points(shelf,polygons,debug=False,mode="grounding"):
     for k in polygons.keys():
         shelves[k] = []
     print("Grabbing grounding line points")
-
     if mode == "grounding":
         iceexpand = bd(icemask==0)
         glline = np.logical_and(iceexpand==1,icemask!=0)
