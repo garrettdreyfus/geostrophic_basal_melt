@@ -20,7 +20,7 @@ import winds as wind
 # Create GLIB
 
 writeBedMach = False
-writeShelfNumbers = True
+writeShelfNumbers = False
 writeGLIB = False
 writePolygons = False
 writeGL =False
@@ -91,15 +91,6 @@ if writeGL:
 with open("data/groundinglinepoints.pickle","rb") as f:
     physical,grid,depths,shelves,shelf_keys = pickle.load(f)
 
-# randomcmap = ListedColormap(np.random.rand ( 256,3))
-# plt.imshow(GLIB,cmap=randomcmap)
-# grid = np.asarray(grid)
-# print(grid.shape)
-# shelf_keys =np.asarray(shelf_keys)
-# plt.scatter(grid[shelf_keys=="Frost"][1],grid[shelf_keys=="Frost"][0],c="red",s=100)
-# plt.scatter(grid.T[1][shelf_keys=="Frost"],grid.T[0][shelf_keys=="Frost"],c="red",s=100)
-# plt.show()
-
 
 ################################################
 
@@ -148,48 +139,6 @@ with open("data/hub_shelf_thermals.pickle","rb") as f:
     glibheats = pickle.load(f)
 
 
-#basal = []
-#melts = melts.where(~np.isnan(melts.w_b),drop=True)
-#
-#newx = xr.DataArray(physical.T[0], dims='new_dim')
-#newy = xr.DataArray(physical.T[1], dims='new_dim')
-#for l in tqdm(range(len(physical))):
-    #melt = melts.interp(phony_dim_1=physical[l][0],phony_dim_0=physical[l][1],method="nearest").w_b.values
-    #basal.append(melt)
-
-#with open("data/amundsilli_gl.pickle","wb") as f:
-    #jpickle.dump(basal,f)
-#with open("data/amundsilli_gl.pickle","rb") as f:
-    #basal = pickle.load(f)
-
-#physical = np.asarray(physical)
-#fig, (ax1,ax2) = plt.subplots(1,2)
-#ax1.scatter(physical.T[0],physical.T[1],c=basal,vmin=0,vmax=10)
-#ax2.scatter(physical.T[0],physical.T[1],c=glibheats,vmin=0,vmax=4)
-#plt.show()
-#xs = np.asarray(glibheats)
-#print(np.nanmin(xs),np.nanmax(xs))
-#xs = xs*np.abs(xs)
-#print(np.nanmin(xs),np.nanmax(xs))
-#basal = np.asarray(basal)
-#
-#xs = xs[~np.isnan(basal)]
-#basal = basal[~np.isnan(basal)]
-
-#basal = basal[~np.isnan(xs)]
-#xs = xs[~np.isnan(xs)]
-#model = LinearRegression().fit(xs.reshape(-1,1), basal)
-#xs = model.predict(xs.reshape(-1,1))
-#print("r2,", r2_score(basal,xs))
-#plt.scatter(xs,basal)
-#plt.xlim(0,20)
-#plt.ylim(0,20)
-#plt.show()
-##
-
-
-
-
 
 slopes_by_shelf = bt.shelf_sort(shelf_keys,glibheats)
 gldepths_by_shelf = bt.shelf_sort(shelf_keys,depths)
@@ -213,31 +162,16 @@ with open("data/new_massloss.pickle","rb") as f:
 #with open("data/cdwdiff_hub_shelf_massloss.pickle","rb") as f:
     #slopes_by_shelf = pickle.load(f)
 
-#winds_by_shelf = wind.AMPS_wind(polygons,"data/AMPS_winds.mat",icemask)
-#with open("data/winds_by_shelf.pickle","wb") as f:
-    #pickle.dump(winds_by_shelf,f)
-with open("data/winds_by_shelf.pickle","rb") as f:
-    winds_by_shelf = pickle.load(f)
-
-polyna_by_shelf = cdw.polyna_dataset(polygons)
-with open("data/polyna_by_shelf.pickle","wb") as f:
-    pickle.dump(polyna_by_shelf,f)
-with open("data/polyna_by_shelf.pickle","rb") as f:
-    polyna_by_shelf = pickle.load(f)
-
-
 thermals=[]
 msds = []
 ys = []
 gldepths = []
 glibshelf=[]
-winds = []
 
 
 znews= [] 
 bars = []
 areas = []
-polyna=[]
 mys = []
 #
 ##
@@ -251,8 +185,6 @@ for k in slopes_by_shelf.keys():
         thermals.append(np.nanmean(slopes_by_shelf[k]))
         gldepths.append(np.nanmean(gldepths_by_shelf[k]))
         glibshelf.append(np.nanmean(glibs_by_shelf[k]))
-        polyna.append(np.nanmean(polyna_by_shelf[k]))
-        winds.append(winds_by_shelf[k])
         #bars.append(sigmas[k])
         areas.append(shelf_areas[k])
         mys.append(rignot_shelf_massloss[k])
@@ -265,7 +197,6 @@ if True:
     ##xs = np.asarray([np.asarray(np.sqrt(areas)),np.asarray(thermals)**2])
     #xs = np.asarray(([np.asarray(thermals)*np.abs(thermals),np.asarray(np.sqrt(areas)),(np.asarray(thermals)**2)*np.asarray(np.sqrt(areas))]))
     print(thermals)
-    polyna = np.asarray(polyna)
     xs = np.asarray(([np.asarray(thermals)*np.abs(thermals),np.asarray(thermals)*np.abs(thermals)]))
     scaler = preprocessing.StandardScaler().fit(xs.T)
     xs = scaler.transform(xs.T)
@@ -283,9 +214,6 @@ if False:
     s = np.arange(len(areas))
     labels=np.asarray(labels)[s]
     #bars=np.asarray(bars)[s]
-    polyna = np.asarray(polyna)
-    #polyna = 1/polyna
-    #polyna[np.isinf(polyna)]=np.max(polyna[~np.isinf(polyna)])
     mys=np.asarray(mys)[s]
     xs = np.asarray(([np.asarray(thermals)[s]**(2),np.sqrt(areas)[s],np.asarray(np.asarray(winds)*-1*np.abs(winds))[s],polyna[s]]))
     scaler = preprocessing.StandardScaler().fit(xs.T)
@@ -301,25 +229,12 @@ if False:
     xs = model.predict(xs)
     print("r2,", r2_score(mys,xs))
     print(3)
-#if False:
-    #xs = np.asarray(([np.asarray(np.sqrt(areas)),np.asarray(thermals)**(3/2)]))
-    #print(xs.shape)
-    #model = DecisionTreeRegressor(max_depth=2).fit(xs.T, mys)
-    #tree.plot_tree(model)
-    #plt.show()
-    #print(2)
-    ##r_sq = model.coef_#score(xs.reshape((-1, 1)), ys)
-    ##xs = np.asarray(xs)/r_sq
-    #xs = model.predict(xs.T)
-    #print(3)
-#print(xs)
+
 #
 #
 #plt.errorbar(xs,mys,yerr=bars,fmt="o")
 plt.scatter(xs,mys)
 plt.plot(range(30),range(30))
-for i in range(len(xs)):
-    plt.annotate(labels[i],(polyna[i],mys[i]))
 ##plt.colorbar()
 plt.show()
 #

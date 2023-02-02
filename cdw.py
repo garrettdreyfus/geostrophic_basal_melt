@@ -296,7 +296,7 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shel
                     heats[l]=np.nan#
                 elif np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
                     zgl = bedvalues[grid[l][0],grid[l][1]]
-                    heats[l]=heat_content((tinterp,sinterp),baths[l],1000,bedvalues[grid[l][1],grid[l][0]])
+                    heats[l]=heat_content((tinterp,sinterp),baths[l],200,bedvalues[grid[l][1],grid[l][0]])
             elif method=="a":
                 zglib = baths[l]
                 zgl = bedvalues[grid[l][0],grid[l][1]]

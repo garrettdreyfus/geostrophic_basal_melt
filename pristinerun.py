@@ -75,16 +75,6 @@ if writeGL:
 with open("data/groundinglinepoints.pickle","rb") as f:
     physical,grid,depths,shelves,shelf_keys = pickle.load(f)
 
-# randomcmap = ListedColormap(np.random.rand ( 256,3))
-# plt.imshow(GLIB,cmap=randomcmap)
-# grid = np.asarray(grid)
-# print(grid.shape)
-# shelf_keys =np.asarray(shelf_keys)
-# plt.scatter(grid[shelf_keys=="Frost"][1],grid[shelf_keys=="Frost"][0],c="red",s=100)
-# plt.scatter(grid.T[1][shelf_keys=="Frost"],grid.T[0][shelf_keys=="Frost"],c="red",s=100)
-# plt.show()
-
-
 ################################################
 
 ################################################
