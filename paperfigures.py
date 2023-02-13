@@ -1,5 +1,6 @@
-import xarray
+import xarray as xr
 import pyproj
+import h5py
 import numpy as np
 import rockhound as rh
 from scipy.interpolate import griddata
@@ -14,9 +15,12 @@ import rasterio
 import shapely
 
 def overview_figure():
+
     salfname,tempfname = "data/woa18_decav81B0_s00_04.nc","data/woa18_decav81B0_t00_04.nc"
-    temp = xarray.open_dataset(tempfname,decode_times=False)
-    temp = temp.sel(depth=1500,drop=True)
+    temp = xr.open_dataset(tempfname,decode_times=False)
+
+
+    temp = temp.sel(depth=500,drop=True)
     temp = temp.isel(time=0,drop=True)
     temp = temp.where(temp.lat<-60,drop=True)
     temp = temp.rename({"lat":"y","lon":"x"})
@@ -35,8 +39,8 @@ def overview_figure():
 
     temp.t_an.rio.write_nodata(np.nan, inplace=True)
 
-    vars_list = list(temp.data_vars)  
-    for var in vars_list:  
+    vars_list = list(temp.data_vars)
+    for var in vars_list:
        del temp[var].attrs['grid_mapping']
 
     temp.t_an.rio.to_raster("data/woafig1.tif")
@@ -45,7 +49,6 @@ def overview_figure():
 
     lx,ly = raster[0].shape
     print(raster.shape)
-
     with open("data/shelfpolygons.pickle","rb") as f:
        polygons = pickle.load(f)
 
@@ -57,13 +60,35 @@ def overview_figure():
     with open("data/glib_by_shelf.pickle","rb") as f:
         glib_by_shelf = pickle.load(f)
 
-    icemask = bedmach.icemask_grounded_and_shelves.values
 
     fig,ax = plt.subplots(1,1)
 
-    ax.pcolormesh(raster.x,raster.y,raster.values[0])
+    icemask = bedmach.icemask_grounded_and_shelves.values
+    icemask[icemask==1] = np.nan
 
-    def build_bar(mapx, mapy, ax, width, xvals=['a','b','c'], yvals=[1,4,2], fcolors=[0,1]):
+    ax.pcolormesh(bedmach.x.values[::10],bedmach.y.values[::10],icemask[::10,::10],cmap="gray",vmin=-0.5,vmax=0.5)
+
+    filename ='data/amundsilli.h5'
+    is_wb = h5py.File(filename,'r')
+    print(is_wb)
+    wb = np.array(is_wb['/w_b'])
+
+    x_wb = np.array(is_wb['/x'])
+    y_wb = np.array(is_wb['/y'])
+    wb = np.array(is_wb['/w_b'])
+
+    fig, ax1 = plt.subplots()
+    extent = [np.min(is_wb['x']),np.max(is_wb['x']),np.min(is_wb['y']),np.max(is_wb['y'])]
+    X,Y = np.meshgrid(x_wb[::20],y_wb[::20])
+    wb = wb[::20,::20]
+    c1 = ax.pcolormesh(X,Y,wb,vmin=-6,vmax=6,cmap="jet")
+    cbar1 = plt.colorbar(c1,ax=ax)
+    cbar1.set_label("Melting in m/yr")
+    c2 = ax.pcolormesh(raster.x[::10],raster.y[::10],raster.values[0][::10,::10],cmap="magma")
+    cbar2 = plt.colorbar(c2,ax=ax,orientation="horizontal")
+    cbar2.set_label("WOA temperature at 750m")
+
+    def build_bar(mapx, mapy, ax, width,title, xvals=['a','b','c'], yvals=[1,4,2], fcolors=[0,1]):
         ax_h = inset_axes(ax, width=width, \
                         height=width, \
                         loc=3, \
@@ -72,33 +97,42 @@ def overview_figure():
                         borderpad=0, \
                         axes_kwargs={'alpha': 0.35, 'visible': True})
         for x,y,c in zip(xvals, yvals, fcolors):
-            ax_h.bar(c, y, label=str(x))
+            ax_h.bar(c, y, label=str(x),color="black")
         ax_h.set_xticks(range(len(xvals)), xvals, fontsize=10, rotation=30)
-        ax_h.axis('off')
+        ax_h.set_yticks(yvals)
+        ax_h.set_title(title)
+        #ax_h.axis('off')
         return ax_h
+
+    with open("data/glib_by_shelf.pickle","rb") as f:
+        glib_by_shelf = pickle.load(f)
+
+    with open("data/simple_shelf_thermals.pickle","rb") as f:
+        glibheats = pickle.load(f)
 
     for k in tqdm(polygons.keys()):
         gons = []
         parts = polygons[k][1]
         polygon = polygons[k][0]
-        if len(parts)>1:
-            parts.append(-1)
-            for l in range(0,len(parts)-1):
-                poly_path=Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T)
-                gons.append(poly_path)
-        else:
-            gons = [Polygon(np.asarray(polygon.exterior.coords.xy).T)]
-        p = PatchCollection(gons)
-        centroid = polygon.centroid
-        print(centroid)
-
-        ax.add_collection(p)
-        if k == "Filchner" or True:
-            build_bar(centroid.x,centroid.y,ax,0.2,xvals=["HUB","AISF"],yvals=[-100,-500])
+        #if len(parts)>1:
+            ##parts.append(-1)
+            #for l in range(0,len(parts)-1):
+                #poly_path=Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T)
+                #gons.append(poly_path)
+        #else:
+            #gons = [Polygon(np.asarray(polygon.exterior.coords.xy).T)]
+        #p = PatchCollection(gons)
+        exterior = np.asarray(polygon.exterior.coords.xy)
+        min_i = np.argmin(np.sum(exterior**2,axis=0).shape)
+        x = exterior[0][min_i]
+        y = exterior[1][min_i]
+        #ax.add_collection(p)
+        if k in glib_by_shelf and k in glibheats and k in ["Filchner","Pine_Island","Amery","Fimbul","Ross_West"]:
+            build_bar(x,y,ax,0.7,k,xvals=["HUB","AISF"],yvals=[glib_by_shelf[k],glibheats[k][3]])
 
     #icemask[icemask==1]=np.nan
     #plt.pcolormesh(bedmach.x,bedmach.y,icemask)
-
+    #plt.savefig("this.png")
     plt.show()
 
 def hub_schematic_figure():
