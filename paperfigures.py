@@ -14,15 +14,36 @@ from matplotlib.collections import PatchCollection
 import rasterio
 import shapely
 
-def overview_figure():
+def grab_bottom(t,max_depth=500):
+    tvalues = t.t_an.values
+    depths = t.depth.values
+    maxindex = np.argmin(np.abs(depths-500))
+    bottom_values = np.empty(tvalues.shape[1:])
+    for i in tqdm(range(tvalues.shape[1])):
+        for j in range(tvalues.shape[2]):
+            nans = np.where(~np.isnan(tvalues[:,i,j]))
+            if len(nans)>0 and len(nans[0])>0:
+                lastindex = nans[0][-1]
+            else:
+                lastindex =-1
+            if lastindex>-1 and depths[lastindex]<500 :
+                bottom_values[i,j] = tvalues[lastindex,i,j]
+            else:
+                bottom_values[i,j] = tvalues[maxindex,i,j]
+    return bottom_values
+                
+
+
+def overview_figure(downscale=5):
 
     salfname,tempfname = "data/woa18_decav81B0_s00_04.nc","data/woa18_decav81B0_t00_04.nc"
     temp = xr.open_dataset(tempfname,decode_times=False)
-
-
-    temp = temp.sel(depth=500,drop=True)
-    temp = temp.isel(time=0,drop=True)
     temp = temp.where(temp.lat<-60,drop=True)
+    temp = temp.isel(time=0,drop=True)
+    B = grab_bottom(temp)
+    temp = temp.sel(depth=500,drop=True)
+    temp.t_an.values = B
+
     temp = temp.rename({"lat":"y","lon":"x"})
     temp = temp.rio.write_crs("epsg:4326")
     #sal.rio.nodata=np.nan
@@ -61,12 +82,17 @@ def overview_figure():
         glib_by_shelf = pickle.load(f)
 
 
-    fig,ax = plt.subplots(1,1)
+    fig,ax = plt.subplots(1,1,figsize=(20,12))
 
     icemask = bedmach.icemask_grounded_and_shelves.values
+    bedmach.bed.values[icemask==0] = np.nan
+    bedmach.bed.values[icemask==1] = np.nan
     icemask[icemask==1] = np.nan
 
-    ax.pcolormesh(bedmach.x.values[::10],bedmach.y.values[::10],icemask[::10,::10],cmap="gray",vmin=-0.5,vmax=0.5)
+    ax.pcolormesh(bedmach.x.values[::downscale],bedmach.y.values[::downscale],icemask[::downscale,::downscale],cmap="gray",vmin=-0.5,vmax=0.5)
+    ax.contour(bedmach.x.values[::downscale],bedmach.y.values[::downscale],bedmach.bed.values[::downscale,::downscale],[-1500],colors=["white","green"])
+    ax.set_xticks([],[])
+    ax.set_yticks([],[])
 
     filename ='data/amundsilli.h5'
     is_wb = h5py.File(filename,'r')
@@ -77,16 +103,15 @@ def overview_figure():
     y_wb = np.array(is_wb['/y'])
     wb = np.array(is_wb['/w_b'])
 
-    fig, ax1 = plt.subplots()
     extent = [np.min(is_wb['x']),np.max(is_wb['x']),np.min(is_wb['y']),np.max(is_wb['y'])]
-    X,Y = np.meshgrid(x_wb[::20],y_wb[::20])
-    wb = wb[::20,::20]
-    c1 = ax.pcolormesh(X,Y,wb,vmin=-6,vmax=6,cmap="jet")
-    cbar1 = plt.colorbar(c1,ax=ax)
+    X,Y = np.meshgrid(x_wb[::downscale],y_wb[::downscale])
+    wb = wb[::downscale,::downscale]
+    c1 = ax.pcolormesh(X,Y,wb,vmin=-4,vmax=4,cmap="jet")
+    cbar1 = plt.colorbar(c1,ax=ax,fraction=0.046, pad=0.04)
     cbar1.set_label("Melting in m/yr")
-    c2 = ax.pcolormesh(raster.x[::10],raster.y[::10],raster.values[0][::10,::10],cmap="magma")
-    cbar2 = plt.colorbar(c2,ax=ax,orientation="horizontal")
-    cbar2.set_label("WOA temperature at 750m")
+    c2 = ax.pcolormesh(raster.x[::downscale],raster.y[::downscale],raster.values[0][::downscale,::downscale],cmap="magma")
+    cbar2 = plt.colorbar(c2,ax=ax,fraction=0.046, pad=0.04)
+    cbar2.set_label("WOA temperature at 500m or Bottom")
 
     def build_bar(mapx, mapy, ax, width,title, xvals=['a','b','c'], yvals=[1,4,2], fcolors=[0,1]):
         ax_h = inset_axes(ax, width=width, \
@@ -127,13 +152,13 @@ def overview_figure():
         x = exterior[0][min_i]
         y = exterior[1][min_i]
         #ax.add_collection(p)
-        if k in glib_by_shelf and k in glibheats and k in ["Filchner","Pine_Island","Amery","Fimbul","Ross_West"]:
-            build_bar(x,y,ax,0.7,k,xvals=["HUB","AISF"],yvals=[glib_by_shelf[k],glibheats[k][3]])
+        #if k in glib_by_shelf and k in glibheats and k in ["Filchner","Pine_Island","Amery","Fimbul","Ross_West"]:
+            #build_bar(x,y,ax,0.7,k,xvals=["HUB","AISF"],yvals=[glib_by_shelf[k],glibheats[k][3]])
 
     #icemask[icemask==1]=np.nan
     #plt.pcolormesh(bedmach.x,bedmach.y,icemask)
-    #plt.savefig("this.png")
-    plt.show()
+    fig.savefig("paperfigures/OverviewFigure.png")
+    #plt.show()
 
 def hub_schematic_figure():
     with open("data/bedmach.pickle","rb") as f:

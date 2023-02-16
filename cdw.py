@@ -25,6 +25,7 @@ from scipy.ndimage import binary_dilation as bd
 from scipy.ndimage import label 
 import rioxarray as riox
 import rasterio
+import scipy
 
 def quad_local_param(thermal_forcing):
     
@@ -63,6 +64,41 @@ def quad_local_param(thermal_forcing):
     melt = (gamma * melt_factor * U_factor * thermal_forcing * abs(thermal_forcing))*(31536000)
     return melt 
 
+def moving_average(x, w):
+    return np.convolve(x, np.ones(w), 'valid') / w
+    
+def generate_test_profiles(depths):
+    profile_depth = 1500
+    Zsml=75
+    pt_bot = 0.8
+    pt_mid = 1
+    pt_surf = -1.8
+    rows = []
+    for d in depths:
+        x = [-profile_depth,(-profile_depth-3*d)/4,-d, -(Zsml+0.25*(d-Zsml)),-Zsml,0];
+        print(x)
+        y = [pt_bot,(pt_bot+pt_mid)/2,pt_mid, (pt_mid+pt_surf)/2,pt_surf,pt_surf];
+        interpolator = scipy.interpolate.PchipInterpolator(x, y)
+        row = interpolator(range(-1500,0,10))
+        row = (row-np.min(row))/np.ptp(row)
+        rows.append(row[::-1])
+    return np.asarray(rows)
+
+def profile_tester(hub,real_profile,test_profiles,depths):
+    #xnew= np.arange(50,min(depth+0,5000))
+    #xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,5000))
+    xnew= np.arange(0,1500,10)
+    #print(xnew,depth,max(d))
+    ynew = real_profile(xnew)
+    ynew=(ynew-np.min(ynew))/np.ptp(ynew)
+    diff = np.sum((test_profiles - ynew)**2,axis=1)
+
+    if ~(np.isnan(diff).all()):
+        return -depths[np.argmin(diff)]-hub
+    else:
+        return np.nan
+
+
 def heat_content(heat_function,depth,plusminus):
     #heat = gsw.cp_t_exact(s,t,d)
     depth = np.abs(depth)
@@ -78,7 +114,6 @@ def heat_content(heat_function,depth,plusminus):
         return np.trapz(ynew,xnew)/len(xnew)
     else:
         return np.nan
-    #return np.trapz(ynew,xnew)-np.dot(np.diff(xnew),gsw.CT_freezing(heat_function[1]((xnew[:-1]+xnew[1:])/2),(xnew[:-1]+xnew[1:])/2,0))
 
 def heat_content_layer(heat_function,depth,plusminus,zgl):
     #heat = gsw.cp_t_exact(s,t,d)
@@ -93,10 +128,60 @@ def heat_content_layer(heat_function,depth,plusminus,zgl):
     ynew = ynew - gsw.CT_freezing(heat_function[1](xnew),zgl,0)
     #return np.nansum(ynew>1.2)/np.sum(~np.isnan(ynew))
     if len(ynew)>0:
-        return cdwdepth-depth#np.trapz(ynew,xnew)/len(xnew)
+        return -cdwdepth+depth#np.trapz(ynew,xnew)/len(xnew)
     else:
         return np.nan
-    #return np.trapz(ynew,xnew)-np.dot(np.diff(xnew),gsw.CT_freezing(heat_function[1]((xnew[:-1]+xnew[1:])/2),(xnew[:-1]+xnew[1:])/2,0))
+
+def isopycnal_depth(heat_function,depth,isopyc=0):
+    depth = np.abs(depth)
+    zi = np.arange(0,depth+500)
+    ti = heat_function[0](zi)
+    si = heat_function[1](zi)
+    di = gsw.rho(si,ti,750)-1000
+    low = np.nanmin(ti[zi<50])
+    high = np.nanmax(ti[zi>75])
+    closest = np.abs(ti-(high+low)/2.0)
+    closest[zi<50]=np.inf
+    isopycnaldepth = zi[np.nanargmin(closest)]
+    #plt.plot(di,zi)
+    #print(isopycnaldepth)
+    #plt.scatter(((high-low)/2.0),isopycnaldepth)
+    #plt.show()
+
+    if ~np.isnan(isopycnaldepth):
+        return -(isopycnaldepth-depth)*(high-low)#np.trapz(ynew,xnew)/len(xnew)
+    else:
+        return np.nan
+
+
+
+def therm_depth(heat_function,depth,therm=0):
+    depth = np.abs(depth)
+    xnew= np.arange(0,depth+500)
+    ynew = heat_function[0](xnew)
+    closest = np.abs(ynew-therm)
+    closest[xnew<75]=np.inf
+    thermdepth = xnew[np.argmin(closest)]
+    #plt.plot(ynew,xnew)
+    #plt.scatter(therm,xnew[np.argmin(closest)])
+    #plt.show()
+
+    if ~np.isnan(thermdepth):
+        return (thermdepth-depth)#np.trapz(ynew,xnew)/len(xnew)
+    else:
+        return np.nan
+
+def interface_temp(heat_function,depth,therm=0):
+    depth = np.abs(depth)
+    xnew= np.arange(0,depth+500)
+    ynew = heat_function[0](xnew)
+    low = np.nanmean(ynew[xnew<75])
+    high = np.nanmax(ynew[xnew>75])
+
+    if ~np.isnan(high) and ~np.isnan(low):
+        return (high-low)/2#np.trapz(ynew,xnew)/len(xnew)
+    else:
+        return np.nan
 
 
 
@@ -343,7 +428,7 @@ def running_mean(x, N):
     cumsum = np.nancumsum(np.insert(x, 0, 0)) 
     return (cumsum[N:] - cumsum[:-N]) / float(N)
 
-def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shelves,debug=False,method="default"):
+def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shelves,debug=False,quant="glibheat"):
     print("temp from closest point")
     heats=[np.nan]*len(baths)
     stx = sal.coords["x"].values
@@ -354,6 +439,8 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shel
     count = 0
     lines = []
     bedvalues = bedmap.bed.values
+    prof_depths = np.asarray(range(100,1500,20))
+    test_profiles = generate_test_profiles(prof_depths)
     for l in tqdm(range(len(closest_points))[::-1]):
         if ~np.isnan(closest_points[l]).any():
             count+=1
@@ -372,42 +459,14 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shel
             if ~(np.isnan(line).any()):
                 lines.append(line)
             tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
-            # plt.scatter(t,d)
-            # plt.plot(tinterp(d),d)
-            # print(tinterp(d))
-            # plt.show()
-            if method=="default":
-                if np.isnan(t[11:]).all():
-                    heats[l]=np.nan#
-                elif np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
-                    heats[l]=heat_content((tinterp,sinterp),baths[l],200)
-            elif method=="a":
-                zglib = baths[l]
-                zgl = bedvalues[grid[l][0],grid[l][1]]
-                closest_t = t[11:][np.nanargmin(np.abs(d[11:]+zglib))]
-                if ~np.isnan(t[11:]).all():
-                    diff_t = running_mean(np.diff(t[11:]),3)
-                    cline = d[11:][np.nanargmax(diff_t)]
-                    #tmax = np.nanmax(t[11:])
-                    tmax=0
-                    zpyc = d[11:][np.nanargmax(t[11:])]
-                    n2,_ = gsw.Nsquared(s[11:],t[11:],d[11:])
-                    n2 = np.asarray(n2)
-                    #print(tmax/2)
-                    if np.sum(t[11:]>0)>0:
-                        #print(t[11:]>0)
-                        z0 = np.nanmin(d[11:][t[11:]>0])
-                        #z0 = np.median(t)
-                    else:
-                        z0=np.nanmin(d[11:])
-                    heats[l]=abs(zglib)-abs(z0)
-                    if zpyc>zglib and zglib > zgl:
-                        heats[l]=abs(zpyc)-abs(zglib)
-                    else:
-                        heats[l]=np.nan
-                else:
-                    heats[l]=np.nan
-
+            if np.isnan(t[11:]).all():
+                heats[l]=np.nan#
+            elif quant=="glibheat" and np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
+                heats[l]=heat_content((tinterp,sinterp),baths[l],50)
+            elif quant=="thermdepth" and np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
+                heats[l]=therm_depth((tinterp,sinterp),baths[l],0.5)
+            elif quant=="isopycnaldepth" and np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
+                heats[l]=isopycnal_depth((tinterp,sinterp),baths[l])
     if debug:
         fig, ax = plt.subplots()
         lc = mc.LineCollection(lines, colors="red", linewidths=2)
@@ -491,7 +550,7 @@ def tempProfileByShelf(bedmap,grid,physical,depths,closest_points,sal,temp,shelf
             count+=1
             centroid = [bedmap.coords["x"].values[grid[l][1]],bedmap.coords["y"].values[grid[l][0]]]
             rdist = np.sqrt((sal.coords["x"]-centroid[0])**2 + (sal.coords["y"]- centroid[1])**2)*mask
-            rdist[np.where(rdist<250000)]=np.inf
+            #rdist[np.where(rdist<250000)]=np.inf
             closest=np.unravel_index(rdist.argmin(), rdist.shape)
             x = stx[closest[0],closest[1]]
             y = sty[closest[0],closest[1]]
@@ -512,6 +571,8 @@ def tempProfileByShelf(bedmap,grid,physical,depths,closest_points,sal,temp,shelf
     shelf_keys[shelf_keys==None] = "None"
 
     fig, ax = plt.subplots()
+    mask[np.isinf(mask)] = np.nan
+    plt.scatter(stx[~np.isnan(mask)],sty[~np.isnan(mask)])
     lc = mc.LineCollection(lines, colors="red", linewidths=2)
     #ax.imshow(bedvalues)
     plt.xlim(-10**7,10**7)

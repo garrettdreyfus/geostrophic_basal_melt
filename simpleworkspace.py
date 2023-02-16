@@ -74,22 +74,23 @@ shelf_areas = bt.shelf_areas()
 glibheats = np.asarray([0]*len(physical))# cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys)
 #glibheats = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys)
 
-glibheats = cdw.tempProfileByShelf(bedmach,grid,physical,depths,physical,sal,temp,shelf_keys)
+#glibheats = cdw.tempProfileByShelf(bedmach,grid,physical,depths,physical,sal,temp,shelf_keys)
 
 # # #physical = np.asarray(physical)
 
-with open("data/simple_shelf_thermals.pickle","wb") as f:
-    pickle.dump(glibheats,f)
+#with open("data/simple_shelf_thermals.pickle","wb") as f:
+    #pickle.dump(glibheats,f)
 with open("data/simple_shelf_thermals.pickle","rb") as f:
     glibheats = pickle.load(f)
 
 with open("data/new_massloss.pickle","rb") as f:
     rignot_shelf_massloss = pickle.load(f)
 
-# glib_by_shelf = cdw.GLIB_by_shelf(GLIB,bedmach,polygons)
+#rignot_shelf_massloss = bt.shelf_mass_loss('data/amundsilli.h5',polygons)
+#glib_by_shelf = cdw.GLIB_by_shelf(GLIB,bedmach,polygons)
 
-# with open("data/glib_by_shelf.pickle","wb") as f:
-#     pickle.dump(glib_by_shelf,f)
+#with open("data/glib_by_shelf.pickle","wb") as f:
+    #pickle.dump(glib_by_shelf,f)
 with open("data/glib_by_shelf.pickle","rb") as f:
     glib_by_shelf = pickle.load(f)
 
@@ -110,21 +111,26 @@ for k in tqdm(glibheats.keys()):
         drafts_u,draft_counts = np.unique(drafts,return_counts=True)
         heats = []
         for draft_depth in drafts_u :
-            icemean.append(cdw.heat_content((tinterp,sinterp),min(abs(glibheats[k][3]),abs(draft_depth)),100,0))
-            glibmean.append(cdw.heat_content((tinterp,sinterp),min(abs(glib_by_shelf[k]),abs(draft_depth)),100,0))
+            icemean.append(cdw.heat_content((tinterp,sinterp),min(abs(glibheats[k][3]),abs(draft_depth)),10))
+            glibmean.append(cdw.heat_content((tinterp,sinterp),min(abs(glib_by_shelf[k]),abs(draft_depth)),10))
         if np.sum(~np.isnan(icemean))>0 and np.sum(~np.isnan(glibmean))>0:
             tforce.append((np.asarray(icemean)[~np.isnan(icemean)].dot(draft_counts[~np.isnan(icemean)]))/np.sum(draft_counts[~np.isnan(icemean)]))
             tforceg.append((np.asarray(glibmean)[~np.isnan(glibmean)].dot(draft_counts[~np.isnan(glibmean)]))/np.sum(draft_counts[~np.isnan(glibmean)]))
             r2013.append(rignot_shelf_massloss[k])
             labels.append(k)
 
-tforce = np.asarray(tforce)**2
-tforceg = np.asarray(tforceg)**2
-print(tforce)
-reg1 = LinearRegression().fit(tforce.reshape(-1,1), r2013)
+plt.scatter(np.asarray(tforce)*np.abs(tforce),r2013)
+for l in range(len(labels)):
+    plt.annotate(labels[l],(tforce[l]*np.abs(tforce),r2013[l]))
+plt.show()
 
-print(reg1.score(tforce.reshape(-1,1), r2013))
-tforce_est = reg1.predict(tforce.reshape(-1,1))
+tforce = np.asarray(tforce)
+tforceg = np.asarray(tforceg)
+print(tforce)
+reg1 = LinearRegression().fit(np.asarray([tforce,tforce*np.abs(tforce)]).T, r2013)
+
+print(reg1.score(np.asarray([tforce,tforce*np.abs(tforce)]).T, r2013))
+tforce_est = reg1.predict(np.asarray([tforce,tforce*np.abs(tforce)]).T)
 
 reg2 = LinearRegression().fit(tforceg.reshape(-1,1), r2013)
 print(reg2.score(tforceg.reshape(-1,1), r2013))
@@ -132,8 +138,8 @@ tforceg_est = reg2.predict(tforceg.reshape(-1,1))
 fig, (ax1,ax2) = plt.subplots(1,2)
 r2_score(r2013,tforce_est)
 r2_score(r2013,tforceg_est)
-ax1.scatter(tforce_est,r2013)
-ax2.scatter(tforceg_est,r2013)
+ax1.scatter(tforce,r2013)
+ax2.scatter(tforceg,r2013)
 plt.show()
 
 

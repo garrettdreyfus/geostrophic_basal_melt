@@ -129,18 +129,28 @@ for l in range(len(baths)):
         baths[l]=bedvalues[grid[l][0],grid[l][1]]
 
 shelf_areas = bt.shelf_areas()
-glibheats = np.asarray([0]*len(physical))# cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys)
-#glibheats = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys)
-#glibheats = cdw.tempFromClosestPointSimple(bedmach,grid,physical,depths,physical,sal,temp,shelf_keys)
+#glibheats = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="glibheat")
+#cdwdepths = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="cdwdepth")
+#isopycnaldepths = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="isopycnaldepth")
 physical = np.asarray(physical)
 #with open("data/hub_shelf_thermals.pickle","wb") as f:
     #pickle.dump(glibheats,f)
 with open("data/hub_shelf_thermals.pickle","rb") as f:
     glibheats = pickle.load(f)
+#with open("data/cdwdepths.pickle","wb") as f:
+    #pickle.dump(cdwdepths,f)
+with open("data/cdwdepths.pickle","rb") as f:
+    cdwdepths = pickle.load(f)
+#with open("data/isopycnaldepths.pickle","wb") as f:
+    #pickle.dump(isopycnaldepths,f)
+with open("data/isopycnaldepths.pickle","rb") as f:
+    isopycnaldepths = pickle.load(f)
 
-
+#glibheats = np.asarray(glibheats)*np.asarray(isopycnaldepths)
 
 slopes_by_shelf = bt.shelf_sort(shelf_keys,glibheats)
+cdws_by_shelf = bt.shelf_sort(shelf_keys,cdwdepths)
+isopycnaldepth_by_shelf = bt.shelf_sort(shelf_keys,isopycnaldepths)
 gldepths_by_shelf = bt.shelf_sort(shelf_keys,depths)
 glibs_by_shelf = bt.shelf_sort(shelf_keys,glibs)
 #rignot_shelf_massloss,rignot_shelf_areas,sigma = cdw.extract_rignot_massloss2019("data/rignot2019.xlsx")
@@ -163,6 +173,8 @@ with open("data/new_massloss.pickle","rb") as f:
     #slopes_by_shelf = pickle.load(f)
 
 thermals=[]
+cdws = []
+isopycnals = []
 msds = []
 ys = []
 gldepths = []
@@ -183,11 +195,19 @@ for k in slopes_by_shelf.keys():
     if k in rignot_shelf_massloss and ~np.isnan(rignot_shelf_massloss[k]):
         labels.append(k)
         thermals.append(np.nanmean(slopes_by_shelf[k]))
+        cdws.append(np.nanmean(cdws_by_shelf[k]))
+        isopycnals.append(np.nanmean(isopycnaldepth_by_shelf[k]))
         gldepths.append(np.nanmean(gldepths_by_shelf[k]))
         glibshelf.append(np.nanmean(glibs_by_shelf[k]))
         #bars.append(sigmas[k])
         areas.append(shelf_areas[k])
         mys.append(rignot_shelf_massloss[k])
+plt.scatter(np.asarray(isopycnals)*np.asarray(thermals),mys,c=np.asarray(thermals))
+#plt.scatter(np.asarray(isopycnals),np.asarray(thermals),c=np.asarray(thermals))
+#plt.scatter(np.asarray(thermals),mys,c=np.asarray(isopycnals))
+plt.show()
+plt.scatter(np.exp(np.asarray(thermals)),mys)
+plt.show()
 #
 #plt.xlabel("Average degrees C above freezing within 200m above HUB")
 #plt.ylabel("Rignot 2019 massloss divided by grounding line length")
@@ -197,7 +217,8 @@ if True:
     ##xs = np.asarray([np.asarray(np.sqrt(areas)),np.asarray(thermals)**2])
     #xs = np.asarray(([np.asarray(thermals)*np.abs(thermals),np.asarray(np.sqrt(areas)),(np.asarray(thermals)**2)*np.asarray(np.sqrt(areas))]))
     print(thermals)
-    xs = np.asarray(([np.asarray(thermals)*np.abs(thermals),np.asarray(thermals)*np.abs(thermals)]))
+    #xs = np.asarray(([np.exp(thermals),np.exp(thermals)])).T
+    xs = np.asarray(([np.asarray(thermals)*np.asarray(isopycnals),thermals*np.asarray(isopycnals)]))
     scaler = preprocessing.StandardScaler().fit(xs.T)
     xs = scaler.transform(xs.T)
     print(mys)
