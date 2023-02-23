@@ -67,34 +67,68 @@ def quad_local_param(thermal_forcing):
 def moving_average(x, w):
     return np.convolve(x, np.ones(w), 'valid') / w
     
-def generate_test_profiles(depths):
+def generate_test_profiles(depths,method="smooth"):
     profile_depth = 1500
-    Zsml=75
-    pt_bot = 0.8
-    pt_mid = 1
-    pt_surf = -1.8
-    rows = []
-    for d in depths:
-        x = [-profile_depth,(-profile_depth-3*d)/4,-d, -(Zsml+0.25*(d-Zsml)),-Zsml,0];
-        print(x)
-        y = [pt_bot,(pt_bot+pt_mid)/2,pt_mid, (pt_mid+pt_surf)/2,pt_surf,pt_surf];
-        interpolator = scipy.interpolate.PchipInterpolator(x, y)
-        row = interpolator(range(-1500,0,10))
-        row = (row-np.min(row))/np.ptp(row)
-        rows.append(row[::-1])
-    return np.asarray(rows)
+    if method=="smooth":
+        Zsml=25
+        pt_bot = 0.8
+        pt_mid = 1
+        pt_surf = -1.8
+        rows = []
+        for d in depths:
+            x = [-profile_depth,(-profile_depth-3*d)/4,-d, -(Zsml+0.25*(d-Zsml)),-Zsml,0];
+            y = [pt_bot,(pt_bot+pt_mid)/2,pt_mid, (pt_mid+pt_surf)/2,pt_surf,pt_surf];
+            interpolator = scipy.interpolate.PchipInterpolator(x, y)
+            row = interpolator(range(-1500,0,10))
+            row = (row-np.min(row))/np.ptp(row)
+            rows.append(row[::-1])
+        return np.asarray(rows)
+    elif method=="square":
+        pt_surf = -1.8
+        pt_bot = 0.8
+        rows = []
+        for d in depths:
+            z = np.asarray(range(-1500,0,10))
+            row = np.full_like(z,pt_surf)
+            row[z>-d]=pt_bot
+            row = (row-np.min(row))/np.ptp(row)
+            rows.append(row[::-1])
+        return np.asarray(rows)
 
-def profile_tester(hub,real_profile,test_profiles,depths):
+
+
+#def mld_
+
+def profile_tester(heat_function,hub,test_profiles,depths,shelf_key=None):
+    hub = np.abs(hub)
+    zi = np.arange(0,1500,10)
+    ti = heat_function[0](zi)
+    si = heat_function[1](zi)
+    di = gsw.rho(si,ti,750)-1000
+    if len(np.where(ti-ti[0]>0.2)[0])>0:
+        mldi = np.where(ti-ti[0]>0.2)[0][0]
+        mld = zi[mldi]
+    else:
+        mld=0
     #xnew= np.arange(50,min(depth+0,5000))
     #xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,5000))
-    xnew= np.arange(0,1500,10)
     #print(xnew,depth,max(d))
-    ynew = real_profile(xnew)
-    ynew=(ynew-np.min(ynew))/np.ptp(ynew)
+    ynew=(di-np.min(di))/np.ptp(di)
     diff = np.sum((test_profiles - ynew)**2,axis=1)
-
+    zpyc = -depths[np.argmin(diff)]/4
+    zpyci = np.argmin(np.abs(zpyc-zi))
+    gprime = di[zpyci+10]-di[zpyci-10]
+    if shelf_key == "Ross_West" and False:
+        fig,(ax1,ax2) = plt.subplots(1,2)
+        ax1.plot(di,-zi)
+        ax1.axhline(y=zpyc,color="red")
+        ax1.axhline(y=-hub,color="blue")
+        ax2.axhline(y=-mld,color="green")
+        ax2.plot(ti,-zi)
+        plt.show()
+        
     if ~(np.isnan(diff).all()):
-        return -depths[np.argmin(diff)]-hub
+        return (-zpyc+hub)*gprime
     else:
         return np.nan
 
@@ -132,27 +166,54 @@ def heat_content_layer(heat_function,depth,plusminus,zgl):
     else:
         return np.nan
 
-def isopycnal_depth(heat_function,depth,isopyc=0):
+def thermoclineg_depth(heat_function,depth,isopyc=0):
     depth = np.abs(depth)
-    zi = np.arange(0,depth+500)
+    zi = np.arange(0,1500)
     ti = heat_function[0](zi)
     si = heat_function[1](zi)
     di = gsw.rho(si,ti,750)-1000
-    low = np.nanmin(ti[zi<50])
-    high = np.nanmax(ti[zi>75])
-    closest = np.abs(ti-(high+low)/2.0)
+    low =  np.nanmin(ti)
+    high = np.nanmax(ti)
+    closest = np.abs(ti-(high+low)/2)
+    #closest = np.abs(ti-0)
+    closesti = np.nanargmin(closest)
     closest[zi<50]=np.inf
-    isopycnaldepth = zi[np.nanargmin(closest)]
-    #plt.plot(di,zi)
-    #print(isopycnaldepth)
-    #plt.scatter(((high-low)/2.0),isopycnaldepth)
-    #plt.show()
+    isopycnaldepth = zi[closesti]
+    #N = np.nanmean(N[:np.nanargmin(closest)])
+    #return np.nansum((ti[closesti:-1]+1.8)*np.diff(di[closesti:])/np.diff(zi[closesti:]))
 
     if ~np.isnan(isopycnaldepth):
         return -(isopycnaldepth-depth)*(high-low)#np.trapz(ynew,xnew)/len(xnew)
+        #return -(isopycnaldepth-depth)#np.trapz(ynew,xnew)/len(xnew)
     else:
         return np.nan
 
+def isopycnal_depth(heat_function,depth,isopyc=0,shelfkey=None):
+    depth = np.abs(depth)
+    zi = np.arange(0,1000)
+    ti = heat_function[0](zi)
+    si = heat_function[1](zi)
+    di = gsw.rho(si,ti,750)-1000
+    dsigdz = np.diff(di,prepend=di[0])/np.diff(zi,prepend=zi[0]-1)
+
+    pycz = np.trapz(dsigdz*zi,zi)/np.trapz(dsigdz,zi)
+    closesti = np.nanargmin(np.abs(zi-pycz))
+    #gprime = np.nanmedian(dsigdz[int(closesti*0.5):int(closesti*1.5)])
+    gprime = np.nanmedian(di[closesti:])-np.nanmedian(di[:closesti])
+    isopycnaldepth = zi[closesti]
+    if shelfkey == "Filchner" or False:
+        plt.plot(di,-zi)
+        plt.axhline(y=-isopycnaldepth,color="red")
+        plt.axhline(y=-depth,color="blue")
+        plt.show()
+
+    #low =  np.nanmin(ti)
+    #high = np.nanmax(ti)
+    if ~np.isnan(isopycnaldepth):
+        return -(isopycnaldepth-depth)*gprime#np.trapz(ynew,xnew)/len(xnew)
+        #return -(isopycnaldepth-depth)#np.trapz(ynew,xnew)/len(xnew)
+    else:
+        return np.nan
 
 
 def therm_depth(heat_function,depth,therm=0):
@@ -294,7 +355,7 @@ def polyna_dataset(polygons):
         else:
             gons = [polygon]
         print(k)
-        print("made it hearE")
+        print("made it hearEisopycnals")
         clipped = raster.rio.clip(gons)
         #plt.imshow(clipped[0])
         #plt.show()
@@ -428,7 +489,7 @@ def running_mean(x, N):
     cumsum = np.nancumsum(np.insert(x, 0, 0)) 
     return (cumsum[N:] - cumsum[:-N]) / float(N)
 
-def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shelves,debug=False,quant="glibheat"):
+def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shelves,debug=False,quant="glibheat",shelfkeys=None):
     print("temp from closest point")
     heats=[np.nan]*len(baths)
     stx = sal.coords["x"].values
@@ -441,11 +502,20 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shel
     bedvalues = bedmap.bed.values
     prof_depths = np.asarray(range(100,1500,20))
     test_profiles = generate_test_profiles(prof_depths)
+    mask = np.zeros(salvals.shape[1:])
+
+    mask[:]=np.inf
+    for l in range(salvals.shape[1]):
+        for k in range(salvals.shape[2]):
+            if np.sum(~np.isnan(salvals[:,l,k]))>0 and np.max(d[~np.isnan(salvals[:,l,k])])>1500:
+                mask[l,k] = 1
+
     for l in tqdm(range(len(closest_points))[::-1]):
         if ~np.isnan(closest_points[l]).any():
-            count+=1
+            count+=0
             centroid = [bedmap.coords["x"].values[closest_points[l][1]],bedmap.coords["y"].values[closest_points[l][0]]]
             rdist = np.sqrt((sal.coords["x"]- centroid[0])**2 + (sal.coords["y"] - centroid[1])**2)
+            rdist = rdist*mask
             closest=np.unravel_index(rdist.argmin(), rdist.shape)
             x = stx[closest[0],closest[1]]
             y = sty[closest[0],closest[1]]
@@ -462,11 +532,20 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shel
             if np.isnan(t[11:]).all():
                 heats[l]=np.nan#
             elif quant=="glibheat" and np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
-                heats[l]=heat_content((tinterp,sinterp),baths[l],50)
+                heats[l]=heat_content((tinterp,sinterp),baths[l],100)
             elif quant=="thermdepth" and np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
                 heats[l]=therm_depth((tinterp,sinterp),baths[l],0.5)
+            elif quant=="cdwdepth" and np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
+                heats[l]=profile_tester((tinterp,sinterp),baths[l],test_profiles,prof_depths,shelf_key=shelves[l])
             elif quant=="isopycnaldepth" and np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
-                heats[l]=isopycnal_depth((tinterp,sinterp),baths[l])
+                if shelfkeys:
+                    heats[l]=isopycnal_depth((tinterp,sinterp),baths[l],shelfkey=shelves[l])
+                else:
+                    heats[l]=isopycnal_depth((tinterp,sinterp),baths[l])
+            elif quant=="thermocline" and np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
+                heats[l]=thermoclineg_depth((tinterp,sinterp),baths[l])
+            elif quant=="distance":
+                heats[l]=dist
     if debug:
         fig, ax = plt.subplots()
         lc = mc.LineCollection(lines, colors="red", linewidths=2)

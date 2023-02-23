@@ -44,10 +44,10 @@ def create_WOA(bed,debug = False):
    return sal,temp
 
 
-sal = xr.open_dataset("data/woa18_decav81B0_s00_04.nc",decode_times=False)
-sal = sal.sel(depth=2000,drop=True)
-sal = sal.isel(time=0,drop=True)
-print(sal)
+#sal = xr.open_dataset("data/woa18_decav81B0_s00_04.nc",decode_times=False)
+#sal = sal.sel(depth=2000,drop=True)
+#sal = sal.isel(time=0,drop=True)
+#print(sal)
 #salfname,tempfname = "data/woa18_decav81B0_s00_04.nc","data/woa18_decav81B0_t00_04.nc"
 #sal = xarray.open_dataset(salfname,decode_times=False)
 #sal = sal.sel(depth=0,drop=True)
@@ -85,9 +85,9 @@ print(sal)
     #polygons = pickle.load(f)
 #
 
-raster = riox.open_rasterio('data/woa.tif')
-plt.imshow(raster.values[0])
-plt.show()
+#raster = riox.open_rasterio('data/woa.tif')
+#plt.imshow(raster.values[0])
+#plt.show()
 #for k in tqdm(polygons.keys()):
     #if k == "Ronne":
         #raster = riox.open_rasterio('data/woa.tif')

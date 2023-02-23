@@ -83,6 +83,16 @@ glibheats = np.asarray([0]*len(physical))# cdw.tempFromClosestPoint(bedmach,grid
 with open("data/simple_shelf_thermals.pickle","rb") as f:
     glibheats = pickle.load(f)
 
+print(glibheats)
+k = "Holmes"
+def explore_graph(glibheats,gbs,k):
+    fig,(ax1,ax2) = plt.subplots(1,2)
+    ax1.plot(glibheats[k][0],-glibheats[k][2])
+    ax1.axhline(gbs[k])
+    ax2.plot(glibheats[k][1],-glibheats[k][2])
+    ax2.axhline(gbs[k])
+    plt.show()
+
 with open("data/new_massloss.pickle","rb") as f:
     rignot_shelf_massloss = pickle.load(f)
 
@@ -94,6 +104,7 @@ with open("data/new_massloss.pickle","rb") as f:
 with open("data/glib_by_shelf.pickle","rb") as f:
     glib_by_shelf = pickle.load(f)
 
+exit()
 tforce = []
 tforceg = []
 r2013 = []
