@@ -296,6 +296,9 @@ if False:
         plt.annotate(labels[k],(np.asarray(thermals[k])*fs[k]*isopycnals[k]*slopes[k],mys[k]))
     plt.show()
 
+
+
+
 fig, ((ax1,ax2),(ax3,ax4)) = plt.subplots(2,2)
 ax1.scatter(np.asarray(thermals),mys,c=salts)
 ax1.set_xlabel("Avg temp at HUB")
@@ -318,10 +321,10 @@ if True:
     #xs = np.asarray(([np.asarray(thermals)*np.abs(thermals),np.asarray(np.sqrt(areas)),(np.asarray(thermals)**2)*np.asarray(np.sqrt(areas))]))
     print(thermals)
     #xs = np.asarray(([np.exp(thermals),np.exp(thermals)])).T
-    xs = np.asarray(([-np.asarray(cdws)*slopes*np.asarray(thermals)*fs,np.asarray(cdws)*slopes*np.asarray(thermals)*fs]))
+    xs = np.asarray(([np.asarray(cdws)*slopes*np.asarray(thermals)])).reshape((-1, 1))
     #xs = np.asarray(([np.asarray(thermals),thermals]))
-    scaler = preprocessing.StandardScaler().fit(xs.T)
-    xs = scaler.transform(xs.T)
+    #scaler = preprocessing.StandardScaler().fit(xs.T)
+    #xs = scaler.transform(xs.T)
     print(mys)
     model = LinearRegression().fit(xs, mys)
     #r_sq = model.coef_#score(xs.reshape((-1, 1)), ys)
@@ -331,6 +334,22 @@ if True:
     print("RMSE",np.sqrt(np.mean((mys-xs)**2)))
     print("RMSE",np.sqrt(np.mean(((mys-xs)/mys)**2)))
     print("r2,", r2_score(mys,xs))
+    tempterms = np.asarray(cdws) * np.asarray(thermals)
+    x = np.linspace(np.min(tempterms)*0.95,np.max(tempterms)*1.05,20)
+    y = np.linspace(np.min(slopes)*0.95,np.max(slopes)*1.05,20)
+    X,Y = np.meshgrid(x,y)
+    Z = np.multiply(X,Y)*model.coef_[0]+model.intercept_
+    im = plt.pcolormesh(X,Y,Z,cmap="gnuplot",vmin=np.min(Z),vmax=np.max(Z))
+    cbar = plt.colorbar(im)
+    cbar.set_label('Melt in m/yr', rotation=270)
+    CS = plt.contour(X,Y,Z,levels=[1,2.5,5,10,15,20],colors="white")
+    plt.clabel(CS, CS.levels, inline=True, fontsize=10)
+    plt.scatter(tempterms,slopes,c="white")
+    plt.xlabel("T at hub * CDW height")
+    plt.ylabel("Slope")
+    for k in range(len(labels)):
+        plt.annotate(labels[k],(tempterms[k],slopes[k]),c="white")
+    plt.show()
 
 if False:
     xs = np.asarray(([-np.asarray(cdws)*np.asarray(thermals)*np.asarray(slopes),np.asarray(thermals),\

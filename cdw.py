@@ -771,7 +771,7 @@ def slopeFromClosestPoint(bedmap,icefront,grid,physical,depths,closest_points,sh
 def slope_by_shelf(bedmach,polygons):
     GLIBmach = bedmach.bed.copy(deep=True)
     print(bedmach)
-    GLIBmach.values[:] = gaussian_filter(bedmach.surface.values[:]-bedmach.thickness.values[:],5)
+    GLIBmach.values[:] = gaussian_filter(bedmach.surface.values[:]-bedmach.thickness.values[:],10)
     GLIBmach.values[np.logical_or(bedmach.icemask_grounded_and_shelves==0,np.isnan(bedmach.icemask_grounded_and_shelves))]=np.nan
     GLIBmach = GLIBmach.rio.write_crs("epsg:3031")
     print(GLIBmach)
