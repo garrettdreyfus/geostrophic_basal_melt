@@ -22,7 +22,7 @@ from matplotlib import collections  as mc
 from functools import partial
 from tqdm.contrib.concurrent import process_map
 from scipy.ndimage import binary_dilation as bd
-from scipy.ndimage import label 
+from scipy.ndimage import label, gaussian_filter 
 import rioxarray as riox
 import rasterio
 import scipy
@@ -98,8 +98,7 @@ def generate_test_profiles(depths,method="smooth"):
 
 
 #def mld_
-
-def profile_tester(heat_function,hub,test_profiles,depths,shelf_key=None):
+def profile_tester_old(heat_function,hub,test_profiles,depths,shelf_key=None):
     hub = np.abs(hub)
     zi = np.arange(0,1500,10)
     ti = heat_function[0](zi)
@@ -115,20 +114,60 @@ def profile_tester(heat_function,hub,test_profiles,depths,shelf_key=None):
     #print(xnew,depth,max(d))
     ynew=(di-np.min(di))/np.ptp(di)
     diff = np.sum((test_profiles - ynew)**2,axis=1)
-    zpyc = -depths[np.argmin(diff)]/4
-    zpyci = np.argmin(np.abs(zpyc-zi))
-    gprime = di[zpyci+10]-di[zpyci-10]
-    if shelf_key == "Ross_West" and False:
+    zpyc = -depths[np.argmin(diff)]/2
+    zpyci = np.argmin(diff)
+    gprime = np.nanmax(ti)-np.nanmin(ti)
+    if shelf_key == "Thwaites" and False:
         fig,(ax1,ax2) = plt.subplots(1,2)
         ax1.plot(di,-zi)
-        ax1.axhline(y=zpyc,color="red")
-        ax1.axhline(y=-hub,color="blue")
-        ax2.axhline(y=-mld,color="green")
+        ax1.axhline(y=zpyc,color="red",label="pyc")
+        ax1.axhline(y=-hub,color="blue",label="hub")
+        ax2.axhline(y=-mld,color="green",label="mld")
         ax2.plot(ti,-zi)
+        ax1.legend()
+        print(zpyc+hub)
+        plt.title(-zpyc+hub)
         plt.show()
         
     if ~(np.isnan(diff).all()):
-        return (-zpyc+hub)*gprime
+        return (zpyc+hub)*gprime
+    else:
+        return np.nan
+
+def profile_tester(heat_function,hub,test_profiles,depths,shelf_key=None):
+    hub = np.abs(hub)
+    zi = np.arange(0,1500,10)
+    ti = heat_function[0](zi)
+    si = heat_function[1](zi)
+    di = gsw.rho(si,ti,750)-1000
+    if len(np.where(ti-ti[0]>0.2)[0])>0:
+        mldi = np.where(ti-ti[0]>0.2)[0][0]
+        mld = zi[mldi]
+    else:
+        mld=0
+
+    di = moving_average(di,10)
+    zi = moving_average(zi,10)
+    ti = moving_average(ti,10)
+    dizi = np.diff(di)/np.diff(zi)
+    thresh = np.quantile(dizi,0.98)
+    zpyc = np.mean(zi[1:][dizi>thresh])
+    zpyci = np.argmin(np.abs(zi-zpyc))
+    gprime = np.nanmean(di[zpyci:]) - np.nanmean(di[:zpyci])
+
+    if shelf_key == "Cook" and False:
+        fig,(ax1,ax2) = plt.subplots(1,2)
+        ax1.plot(di,-zi)
+        ax1.axhline(y=-zpyc,color="red",label="pyc")
+        ax1.axhline(y=-hub,color="blue",label="hub")
+        ax2.axhline(y=-mld,color="green",label="mld")
+        ax2.plot(ti,-zi)
+        ax1.legend()
+        plt.title(-zpyc+hub)
+        plt.show()
+        
+    if ~(np.isnan(di).all()):
+        return (-(zpyc)+(hub))*gprime
     else:
         return np.nan
 
@@ -330,6 +369,30 @@ def extract_rignot_massloss2013(fname):
             
     return rignot_shelf_my,sigma
 
+
+def extract_adusumilli(fname):
+    dfs = pd.read_csv(fname)
+    rignot_shelf_my = {}
+    sigma = {}
+    for l in range(len(dfs["Ice Shelf"])):
+        if  dfs["Ice Shelf"][l] and dfs["Basal melt rate, 1994–2018 (m/yr)"][l]:
+            shelves = dfs["Ice Shelf"][l].split("\n")
+            melts = dfs["Basal melt rate, 1994–2018 (m/yr)"][l].split("\n")
+            for i in range(len(shelves)):
+                mystr = melts[i]
+                shelfname = shelves[i]
+                if shelfname[-1] == " ":
+                    shelfname = shelves[i][:-1]
+                shelfname = shelfname.replace(" ","_")
+                my = float(mystr.split("±")[0])
+                sig = float(mystr.split("±")[1])
+                rignot_shelf_my[shelfname] = my
+                sigma[shelfname] = sig
+            
+    return rignot_shelf_my,sigma
+
+
+
 def polyna_dataset(polygons):
     llset = open_CtlDataset('data/polynall.ctl')
     llset = llset.rename({"lat":"y","lon":"x"})
@@ -347,52 +410,25 @@ def polyna_dataset(polygons):
         gons = []
         parts = polygons[k][1]
         polygon = polygons[k][0]
+        delta = 0
         if len(parts)>1:
             parts.append(-1)
             for l in range(0,len(parts)-1):
                 poly_path=shapely.geometry.Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T).buffer(10**4)
                 gons.append(poly_path)
+                delta+=gons[-1].length
         else:
-            gons = [polygon]
+            gons = [polygon.buffer(10**4)]
+            delta+=polygon.length
         print(k)
         print("made it hearEisopycnals")
-        clipped = raster.rio.clip(gons)
-        #plt.imshow(clipped[0])
-        #plt.show()
-        polyna_rates[k] = np.nanmean(np.asarray(clipped[0])[clipped<1000])
+        clipped = raster.rio.clip(gons,all_touched=True)
+        clipped = np.asarray(clipped)
+        clipped[clipped>30000000]=np.nan
+        polyna_rates[k] = np.nansum(clipped)/delta
         del clipped
 
     return polyna_rates
-
-
-    #llset.rio.to_raster("data/amundsilli.tif")
-
-        #melts = xr.open_dataset(dsfname)
-        #melts["phony_dim_1"] = melts.x.T[0]
-        #melts["phony_dim_0"] = melts.y.T[0]
-        #melts = melts.drop_vars(["x","y"])
-        #melts = melts.rename({"phony_dim_1":"x","phony_dim_0":"y"})
-        #melts.rio.to_raster("data/amundsilli.tif")
-        #print(melts)
-#
-    #projection = pyproj.Proj("epsg:3031")
-    #lons,lats = np.meshgrid(llset.lon,llset.lat)
-    #x,y = projection.transform(lons,lats)
-    #llset.pr.values[0,:,:][llset.pr.values[0,:,:]==0] = np.nan
-    #llset.coords["x"]= (("lat","lon"),x)
-    #llset.coords["y"]= (("lat","lon"),y)
-    #bedmap = rh.fetch_bedmap2(datasets=["bed","thickness","surface","icemask_grounded_and_shelves"])
-    #xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
-    #projection = pyproj.Proj("epsg:4326")
-    #print("transform")
-    #xvals,yvals = projection.transform(xvals,yvals)
-    #polyna = np.full_like(bedmap.bed.values,np.nan)
-    #print("interp")
-    #from scipy.interpolate import griddata
-    #xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
-    ##polyna = griddata(np.asarray([llset.x.values.flatten(),llset.y.values.flatten()]).T,llset.pr.values.flatten(),(xvals,yvals))
-    #with open("data/polynainterp.pickle","wb") as f:
-        #pickle.dump(polyna,f)
 
 
 def closest_point_pfun(grid,bedvalues,icemask,bordermask,baths,l):
@@ -509,7 +545,6 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shel
         for k in range(salvals.shape[2]):
             if np.sum(~np.isnan(salvals[:,l,k]))>0 and np.max(d[~np.isnan(salvals[:,l,k])])>1500:
                 mask[l,k] = 1
-
     for l in tqdm(range(len(closest_points))[::-1]):
         if ~np.isnan(closest_points[l]).any():
             count+=0
@@ -526,6 +561,7 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shel
             t = gsw.CT_from_t(s,t,d)
             line = ([physical[l][0],physical[l][1]],[centroid[0],centroid[1]])
             dist = np.sqrt((physical[l][1]-x)**2 + (physical[l][0]-y)**2)
+
             if ~(np.isnan(line).any()):
                 lines.append(line)
             tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
@@ -698,3 +734,79 @@ def GLIB_by_shelf(GLIB,bedmach,polygons):
         print(glib_by_shelf[k])
     return glib_by_shelf
  
+
+
+def slopeFromClosestPoint(bedmap,icefront,grid,physical,depths,closest_points,shelf_keys,shelf_keys_edge,mode="euclid"):
+    print("temp from closest point")
+    slopes=[np.nan]*len(depths)
+    projection = pyproj.Proj("epsg:3031")
+
+    count = 0
+    bedvalues = bedmap.bed.values
+    icefrontT = np.asarray(icefront).T
+    if mode=="closest":
+        for l in tqdm(range(len(closest_points))[::-1]):
+            if ~np.isnan(closest_points[l]).any():
+                count+=0
+                centroid = [bedmap.coords["x"].values[closest_points[l][1]],bedmap.coords["y"].values[closest_points[l][0]]]
+                rdist = np.sqrt((icefrontT[0]- centroid[0])**2 + (icefrontT[1] - centroid[1])**2)
+                dist= np.nanmin(rdist)
+                slopes[l] = (depths[l]/dist)
+    elif mode == "euclid":
+        for l in tqdm(range(len(physical))):
+            if ~np.isnan(closest_points[l]).any():
+                centroid = [physical[l][0],physical[l][1]]
+                rdist = np.sqrt((icefrontT[0]- centroid[0])**2 + (icefrontT[1] - centroid[1])**2)
+                dist= np.nanmin(rdist)
+                #dist = np.nanmean(rdist[shelf_keys_edge==shelf_keys[l]])
+                if dist !=0:
+                    slopes[l] = abs(depths[l]/dist)
+                else:
+                    slopes[l] = np.nan 
+
+    return slopes
+
+
+
+def slope_by_shelf(bedmach,polygons):
+    GLIBmach = bedmach.bed.copy(deep=True)
+    print(bedmach)
+    GLIBmach.values[:] = gaussian_filter(bedmach.surface.values[:]-bedmach.thickness.values[:],5)
+    GLIBmach.values[np.logical_or(bedmach.icemask_grounded_and_shelves==0,np.isnan(bedmach.icemask_grounded_and_shelves))]=np.nan
+    GLIBmach = GLIBmach.rio.write_crs("epsg:3031")
+    print(GLIBmach)
+    del GLIBmach.attrs['grid_mapping']
+    GLIBmach.rio.to_raster("data/glibmach.tif")
+
+    glib_by_shelf = {}
+    for k in tqdm(polygons.keys()):
+        raster = riox.open_rasterio('data/glibmach.tif')
+        gons = []
+        parts = polygons[k][1]
+        polygon = polygons[k][0]
+        if len(parts)>1:
+            parts.append(-1)
+            for l in range(0,len(parts)-1):
+                poly_path=shapely.geometry.Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T)#.buffer(10**4)
+                gons.append(poly_path)
+        else:
+            gons = [polygon]
+        print(k)
+        print("made it hearE")
+        clipped = raster.rio.clip(gons)[0]
+        clipped = np.asarray(clipped)
+        clipped[clipped<-9000] = np.nan
+        grad = np.gradient(clipped)
+        #grad[0] = grad[0]
+        #grad[1] = grad[1]
+        #grad = np.sqrt(np.nanmean(grad[0])**2 + np.nanmean(grad[1])**2)
+
+        grad[0] = grad[0]**2
+        grad[1] = grad[1]**2
+        grad = np.sqrt(np.sum(grad,axis=0))
+        if k == "Cook" and False:
+            plt.imshow(clipped)
+            plt.show()
+        glib_by_shelf[k] = np.nanmean(grad)
+    plt.show()
+    return glib_by_shelf

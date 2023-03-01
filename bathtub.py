@@ -92,7 +92,11 @@ def shelf_mass_loss(dsfname,polygons,firstrun=False):
             gons = [polygon]
         print(k)
         print("made it hearE")
-        clipped = raster.rio.clip(gons,from_disk=True)
+        clipped = raster.rio.clip(gons,from_disk=True,all_touched=True)
+        if k == "Shackleton":
+            plt.imshow(clipped[0])
+            plt.colorbar()
+            plt.show()
         melt_rates[k] = np.nanmean(clipped[0])
         del clipped
 
