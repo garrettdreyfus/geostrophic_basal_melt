@@ -83,8 +83,6 @@ glibheats = np.asarray([0]*len(physical))# cdw.tempFromClosestPoint(bedmach,grid
 with open("data/simple_shelf_thermals.pickle","rb") as f:
     glibheats = pickle.load(f)
 
-print(glibheats)
-k = "Holmes"
 def explore_graph(glibheats,gbs,k):
     fig,(ax1,ax2) = plt.subplots(1,2)
     ax1.plot(glibheats[k][0],-glibheats[k][2])
@@ -96,6 +94,9 @@ def explore_graph(glibheats,gbs,k):
 with open("data/new_massloss.pickle","rb") as f:
     rignot_shelf_massloss = pickle.load(f)
 
+with open("data/slopes_by_shelf.pickle","rb") as f:
+    slopes_by_shelf = pickle.load(f)
+
 #rignot_shelf_massloss = bt.shelf_mass_loss('data/amundsilli.h5',polygons)
 #glib_by_shelf = cdw.GLIB_by_shelf(GLIB,bedmach,polygons)
 
@@ -104,16 +105,15 @@ with open("data/new_massloss.pickle","rb") as f:
 with open("data/glib_by_shelf.pickle","rb") as f:
     glib_by_shelf = pickle.load(f)
 
-exit()
 tforce = []
 tforceg = []
+slopes = []
 r2013 = []
 #rignot_shelf_massloss,sigmas = cdw.extract_rignot_massloss2013("data/rignot2013.xlsx")
 labels = []
 draft = bedmach.surface.values - bedmach.thickness.values
 for k in tqdm(glibheats.keys()):
     if k in rignot_shelf_massloss.keys() and ~np.isnan(rignot_shelf_massloss[k]):
-
         tinterp,sinterp = interpolate.interp1d(glibheats[k][2],np.asarray(glibheats[k][0])),interpolate.interp1d(glibheats[k][2],np.asarray(glibheats[k][1]))
         icemean = []
         glibmean = []
@@ -129,28 +129,23 @@ for k in tqdm(glibheats.keys()):
             tforceg.append((np.asarray(glibmean)[~np.isnan(glibmean)].dot(draft_counts[~np.isnan(glibmean)]))/np.sum(draft_counts[~np.isnan(glibmean)]))
             r2013.append(rignot_shelf_massloss[k])
             labels.append(k)
+            slopes.append(slopes_by_shelf[k])
 
-plt.scatter(np.asarray(tforce)*np.abs(tforce),r2013)
+plt.scatter(np.asarray(tforce)*np.abs(tforce)*np.asarray(slopes),r2013)
 for l in range(len(labels)):
-    plt.annotate(labels[l],(tforce[l]*np.abs(tforce),r2013[l]))
+    plt.annotate(labels[l],(tforce[l]*np.abs(tforce)*slopes[l],r2013[l]))
 plt.show()
 
 tforce = np.asarray(tforce)
-tforceg = np.asarray(tforceg)
 print(tforce)
-reg1 = LinearRegression().fit(np.asarray([tforce,tforce*np.abs(tforce)]).T, r2013)
+reg1 = LinearRegression().fit(np.asarray([tforce*np.abs(tforce)*slopes,tforce*np.abs(tforce)*slopes]).T, r2013)
 
-print(reg1.score(np.asarray([tforce,tforce*np.abs(tforce)]).T, r2013))
-tforce_est = reg1.predict(np.asarray([tforce,tforce*np.abs(tforce)]).T)
+print(reg1.score(np.asarray([tforce*np.abs(tforce)*slopes,tforce*np.abs(tforce)*slopes]).T, r2013))
+tforce_est = reg1.predict(np.asarray([tforce*np.abs(tforce)*slopes,tforce*np.abs(tforce)*slopes]).T)
 
-reg2 = LinearRegression().fit(tforceg.reshape(-1,1), r2013)
-print(reg2.score(tforceg.reshape(-1,1), r2013))
-tforceg_est = reg2.predict(tforceg.reshape(-1,1))
-fig, (ax1,ax2) = plt.subplots(1,2)
+fig, (ax1) = plt.subplots(1,1)
 r2_score(r2013,tforce_est)
-r2_score(r2013,tforceg_est)
-ax1.scatter(tforce,r2013)
-ax2.scatter(tforceg,r2013)
+ax1.scatter(tforce_est,r2013)
 plt.show()
 
 

@@ -115,8 +115,9 @@ with open("data/summerwoa.pickle","rb") as f:
     sal,temp = pickle.load(f)
 
 if createClosestWOA:
-    closest_points = cdw.closest_WOA_points(grid,baths,bedmach)
-    with open("data/closest_points.pickle","wb") as f:
+    zerobaths = np.full_like(baths,0)
+    closest_points = cdw.closest_WOA_points(grid,zerobaths,bedmach,method="bfs")
+    with open("data/closest_points_ZERO.pickle","wb") as f:
         pickle.dump(closest_points,f)
 with open("data/closest_points.pickle","rb") as f:
     closest_points = pickle.load(f)
@@ -140,6 +141,7 @@ with open("data/physical_ice.pickle","rb") as f:
 
 #slopes = cdw.slopeFromClosestPoint(bedmach,physical_ice,grid,physical,depths,closest_points,shelf_keys,shelf_keys_edge)
 #glibheats = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="glibheat")
+#layertemp = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="newtemp")
 #hubsalts = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="glibheat")
 #cdwdepths = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="cdwdepth")
 #distances = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="distance")
@@ -149,31 +151,46 @@ physical = np.asarray(physical)
     #pickle.dump(distances,f)
 with open("data/distances.pickle","rb") as f:
     distances = pickle.load(f)
+
+#with open("data/layertemp.pickle","wb") as f:
+    #pickle.dump(layertemp,f)
+with open("data/layertemp.pickle","rb") as f:
+    layertemp = pickle.load(f)
+
+
 #with open("data/hub_shelf_thermals.pickle","wb") as f:
     #pickle.dump(glibheats,f)
 with open("data/hub_shelf_thermals.pickle","rb") as f:
     glibheats = pickle.load(f)
-
+#glibheats = layertemp
 #with open("data/hub_shelf_salts.pickle","wb") as f:
     #pickle.dump(hubsalts,f)
 with open("data/hub_shelf_salts.pickle","rb") as f:
     hubsalts = pickle.load(f)
 
-##with open("data/cdwdepths.pickle","wb") as f:
+#with open("data/cdwdepths.pickle","wb") as f:
     #pickle.dump(cdwdepths,f)
 with open("data/cdwdepths.pickle","rb") as f:
     cdwdepths = pickle.load(f)
+
 #with open("data/isopycnaldepths.pickle","wb") as f:
     #pickle.dump(isopycnaldepths,f)
 with open("data/isopycnaldepths.pickle","rb") as f:
     isopycnaldepths = pickle.load(f)
 
 #slopes_by_shelf = cdw.slope_by_shelf(bedmach,polygons)
-
+#
 #with open("data/slopes_by_shelf.pickle","wb") as f:
     #pickle.dump(slopes_by_shelf,f)
 with open("data/slopes_by_shelf.pickle","rb") as f:
     slopes_by_shelf = pickle.load(f)
+
+#volumes_by_shelf = cdw.volumes_by_shelf(bedmach,polygons)
+
+#with open("data/volumes_by_shelf.pickle","wb") as f:
+    #pickle.dump(volumes_by_shelf,f)
+with open("data/volumes.pickle","rb") as f:
+    volumes_by_shelf = pickle.load(f)
 
 #polyna_by_shelf = cdw.polyna_dataset(polygons)
 #with open("data/polyna_by_shelf.pickle","wb") as f:
@@ -181,6 +198,7 @@ with open("data/slopes_by_shelf.pickle","rb") as f:
 with open("data/polyna_by_shelf.pickle","rb") as f:
     polyna_by_shelf = pickle.load(f)
 #glibheats = np.asarray(glibheats)*np.asarray(isopycnaldepths)
+
 
 hubheats_by_shelf = bt.shelf_sort(shelf_keys,glibheats)
 salts_by_shelf = bt.shelf_sort(shelf_keys,hubsalts)
@@ -233,6 +251,7 @@ bars = []
 areas = []
 mys = []
 slopes = []
+volumes = []
 fs = []
 sigmas = []
 #
@@ -248,6 +267,7 @@ for k in slopes_by_shelf.keys():
         lon,lat = projection(x,y,inverse=True)
         fs.append(1/np.abs(gsw.f(lat)))
         slopes.append(slopes_by_shelf[k])
+        volumes.append(volumes_by_shelf[k])
         labels.append(k)
         thermals.append(np.nanmean(hubheats_by_shelf[k]))
         cdws.append(np.nanmean(cdws_by_shelf[k]))
@@ -307,33 +327,36 @@ ax2.scatter(np.asarray(cdws),mys,c=thermals)
 ax2.set_xlabel("Avg depth of thermocline above HUB * delta t")
 ax3.scatter(np.asarray(slopes),mys,c=thermals)
 ax3.set_xlabel("Avg depth of thermocline above HUB * delta t")
-ax4.scatter(np.asarray(thermals)*fs*np.asarray(cdws)*slopes,mys,c=gldepths)
-ax4.errorbar(np.asarray(thermals)*fs*np.asarray(cdws)*slopes,mys,yerr=sigmas,ls='none')
+melts = cdws*np.asarray(thermals)*slopes 
+ax4.scatter(melts,mys,c=gldepths)
+ax4.errorbar(melts,mys,yerr=sigmas,ls='none')
 ax4.set_xlabel("Avg depth of thermocline * avg temp above HUB * delta t")
 for k in range(len(labels)):
     ax1.annotate(labels[k],(thermals[k],mys[k]))
     ax2.annotate(labels[k],(np.asarray(cdws[k]),mys[k]))
     ax3.annotate(labels[k],(np.asarray(slopes[k]),mys[k]))
-    ax4.annotate(labels[k],(np.asarray(thermals[k])*fs[k]*cdws[k]*slopes[k],mys[k]))
+    ax4.annotate(labels[k],(melts[k],mys[k]))
 plt.show()
 if True:
     ##xs = np.asarray([np.asarray(np.sqrt(areas)),np.asarray(thermals)**2])
     #xs = np.asarray(([np.asarray(thermals)*np.abs(thermals),np.asarray(np.sqrt(areas)),(np.asarray(thermals)**2)*np.asarray(np.sqrt(areas))]))
     print(thermals)
     #xs = np.asarray(([np.exp(thermals),np.exp(thermals)])).T
-    xs = np.asarray(([np.asarray(cdws)*slopes*np.asarray(thermals)])).reshape((-1, 1))
+    xs = np.asarray(([melts])).reshape((-1, 1))
     #xs = np.asarray(([np.asarray(thermals),thermals]))
     #scaler = preprocessing.StandardScaler().fit(xs.T)
     #xs = scaler.transform(xs.T)
     print(mys)
-    model = LinearRegression().fit(xs, mys)
+    sigmas = np.asarray(sigmas)
+    model = LinearRegression().fit(xs, mys,(2/sigmas))
     #r_sq = model.coef_#score(xs.reshape((-1, 1)), ys)
     print(model.coef_)
     #xs = np.asarray(xs)/r_sq
+    oldxs = xs
     xs = model.predict(xs)
     print("RMSE",np.sqrt(np.mean((mys-xs)**2)))
     print("RMSE",np.sqrt(np.mean(((mys-xs)/mys)**2)))
-    print("r2,", r2_score(mys,xs))
+    print("r2,", model.score(oldxs,mys,(2/sigmas)))
     tempterms = np.asarray(cdws) * np.asarray(thermals)
     x = np.linspace(np.min(tempterms)*0.95,np.max(tempterms)*1.05,20)
     y = np.linspace(np.min(slopes)*0.95,np.max(slopes)*1.05,20)

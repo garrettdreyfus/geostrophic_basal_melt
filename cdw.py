@@ -27,80 +27,12 @@ import rioxarray as riox
 import rasterio
 import scipy
 
-def quad_local_param(thermal_forcing):
-    
-    """
-    Apply the quadratic local parametrization.
-    
-    This function computes the basal melt based on a quadratic local parametrization (based on Favier et al., 2019 or DeConto and Pollard, 2016), revisited in Burgard et al. 2021.
-    
-    Parameters
-    ----------
-    gamma : scalar
-        Heat exchange velocity in m per second
-    melt_factor : scalar 
-        Melt factor representing (rho_sw*c_pw) / (rho_i*L_i) in :math:`\mathtt{K}^{-1}`.
-    thermal_forcing: scalar or array
-        Difference between T and the freezing temperature Tf (T-Tf) in K or degrees C
-    U_factor : scalar or array
-        Factor introduced to emulate the speed of the current, see function calculate_melt_rate_2D_simple_1isf.
-    Returns
-    -------
-    melt : scalar or array
-        Melt rate in m ice per second
-    """
-    rho_sw = 1028. # kg m-3
-    c_po = 3974. # J kg-1 K-1
-    rho_i = 917. # kg m-3
-    L_i = 3.34 * 10**5# J kg-1
-    rho_fw = 1000.
-
-    gamma = 5.9*10**-4
-
-    melt_factor = (rho_sw * c_po) / (rho_i * L_i) # K-1
-
-    U_factor=melt_factor
-    
-    melt = (gamma * melt_factor * U_factor * thermal_forcing * abs(thermal_forcing))*(31536000)
-    return melt 
-
 def moving_average(x, w):
     return np.convolve(x, np.ones(w), 'valid') / w
-    
-def generate_test_profiles(depths,method="smooth"):
-    profile_depth = 1500
-    if method=="smooth":
-        Zsml=25
-        pt_bot = 0.8
-        pt_mid = 1
-        pt_surf = -1.8
-        rows = []
-        for d in depths:
-            x = [-profile_depth,(-profile_depth-3*d)/4,-d, -(Zsml+0.25*(d-Zsml)),-Zsml,0];
-            y = [pt_bot,(pt_bot+pt_mid)/2,pt_mid, (pt_mid+pt_surf)/2,pt_surf,pt_surf];
-            interpolator = scipy.interpolate.PchipInterpolator(x, y)
-            row = interpolator(range(-1500,0,10))
-            row = (row-np.min(row))/np.ptp(row)
-            rows.append(row[::-1])
-        return np.asarray(rows)
-    elif method=="square":
-        pt_surf = -1.8
-        pt_bot = 0.8
-        rows = []
-        for d in depths:
-            z = np.asarray(range(-1500,0,10))
-            row = np.full_like(z,pt_surf)
-            row[z>-d]=pt_bot
-            row = (row-np.min(row))/np.ptp(row)
-            rows.append(row[::-1])
-        return np.asarray(rows)
-
-
-
-#def mld_
-def profile_tester_old(heat_function,hub,test_profiles,depths,shelf_key=None):
+  
+def newtemp(heat_function,hub,shelf_key=None):
     hub = np.abs(hub)
-    zi = np.arange(0,1500,10)
+    zi = np.arange(0,1500,1)
     ti = heat_function[0](zi)
     si = heat_function[1](zi)
     di = gsw.rho(si,ti,750)-1000
@@ -109,34 +41,36 @@ def profile_tester_old(heat_function,hub,test_profiles,depths,shelf_key=None):
         mld = zi[mldi]
     else:
         mld=0
-    #xnew= np.arange(50,min(depth+0,5000))
-    #xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,5000))
-    #print(xnew,depth,max(d))
-    ynew=(di-np.min(di))/np.ptp(di)
-    diff = np.sum((test_profiles - ynew)**2,axis=1)
-    zpyc = -depths[np.argmin(diff)]/2
-    zpyci = np.argmin(diff)
-    gprime = np.nanmax(ti)-np.nanmin(ti)
-    if shelf_key == "Thwaites" and False:
-        fig,(ax1,ax2) = plt.subplots(1,2)
-        ax1.plot(di,-zi)
-        ax1.axhline(y=zpyc,color="red",label="pyc")
-        ax1.axhline(y=-hub,color="blue",label="hub")
-        ax2.axhline(y=-mld,color="green",label="mld")
-        ax2.plot(ti,-zi)
-        ax1.legend()
-        print(zpyc+hub)
-        plt.title(-zpyc+hub)
-        plt.show()
-        
-    if ~(np.isnan(diff).all()):
-        return (zpyc+hub)*gprime
+
+    di = moving_average(di,20)
+    zi = moving_average(zi,20)
+    ti = moving_average(ti,20)
+    si = moving_average(si,20)
+    dizi = np.diff(di)/np.diff(zi)
+    thresh = np.quantile(dizi,0.98)
+
+    zpyc = np.mean(zi[1:][dizi>thresh])
+    zpyci = np.argmin(np.abs(zi-zpyc))
+    hubi = np.argmin(np.abs(zi-hub))
+
+    if hubi==0:hubi=2
+
+    if zpyci<=hubi and hubi-zpyci<5:
+        zpyci = hubi-5
+
+    if zpyci>hubi: 
+        zpyci=max(hubi-5,0)
+
+
+    if ~(np.isnan(di).all()):
+        return np.mean(ti[zpyci:hubi]-gsw.CT_freezing(si[zpyci:hubi],zi[zpyci:hubi],0))
     else:
         return np.nan
 
-def profile_tester(heat_function,hub,test_profiles,depths,shelf_key=None):
+
+def pycnocline(heat_function,hub,shelf_key=None):
     hub = np.abs(hub)
-    zi = np.arange(0,1500,10)
+    zi = np.arange(0,1500,1)
     ti = heat_function[0](zi)
     si = heat_function[1](zi)
     di = gsw.rho(si,ti,750)-1000
@@ -146,16 +80,18 @@ def profile_tester(heat_function,hub,test_profiles,depths,shelf_key=None):
     else:
         mld=0
 
-    di = moving_average(di,10)
-    zi = moving_average(zi,10)
-    ti = moving_average(ti,10)
+    di = moving_average(di,50)
+    zi = moving_average(zi,50)
+    ti = moving_average(ti,50)
+    si = moving_average(si,50)
     dizi = np.diff(di)/np.diff(zi)
     thresh = np.quantile(dizi,0.98)
     zpyc = np.mean(zi[1:][dizi>thresh])
     zpyci = np.argmin(np.abs(zi-zpyc))
-    gprime = np.nanmean(di[zpyci:]) - np.nanmean(di[:zpyci])
+    di = gsw.rho(si,ti,zpyc)-1000
+    gprime = (np.nanmean(di[zpyci:]) - np.nanmean(di[:zpyci]))/np.nanmean(di[:])
 
-    if shelf_key == "Cook" and False:
+    if shelf_key == "Cook" and False:# and (-zpyc+hub) < 75:
         fig,(ax1,ax2) = plt.subplots(1,2)
         ax1.plot(di,-zi)
         ax1.axhline(y=-zpyc,color="red",label="pyc")
@@ -173,18 +109,14 @@ def profile_tester(heat_function,hub,test_profiles,depths,shelf_key=None):
 
 
 def heat_content(heat_function,depth,plusminus):
-    #heat = gsw.cp_t_exact(s,t,d)
     depth = np.abs(depth)
-    #xnew= np.arange(50,min(depth+0,5000))
-    #xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,5000))
     xnew= np.arange(max(0,depth-plusminus),depth)
-    #print(xnew,depth,max(d))
+    #xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,1500))
     ynew = heat_function[0](xnew)
-    #xnew,ynew = xnew[ynew>0],ynew[ynew>0]
-    ynew = ynew - gsw.CT_freezing(heat_function[1](xnew),xnew,depth)
-    #return np.nansum(ynew>1.2)/np.sum(~np.isnan(ynew))
+    ynew = ynew - gsw.CT_freezing(heat_function[1](xnew),xnew,0)
     if len(ynew)>0:
         return np.trapz(ynew,xnew)/len(xnew)
+        #return np.max(ynew)
     else:
         return np.nan
 
@@ -438,14 +370,12 @@ def closest_point_pfun(grid,bedvalues,icemask,bordermask,baths,l):
     search = np.full_like(bedvalues,0)
     search[:]=0
     search[grid[l][0],grid[l][1]]=1
-    route = np.logical_and(bedvalues<(bath+20),icemask!=0)
+    route = np.logical_and(bedvalues<(min(bath+20,0)),icemask!=0)
     searchsum=0
     if np.sum(np.logical_and(route,bordermask))>0:
         intersection = [[],[]]
-        iters = 0
         while len(intersection[0])==0:
-            iters+=20
-            search = bd(search,mask=route,iterations=50)
+            search = bd(search,mask=route,iterations=200)
             searchsumnew = np.sum(search)
             if searchsum !=searchsumnew:
                 searchsum = searchsumnew
@@ -458,6 +388,7 @@ def closest_point_pfun(grid,bedvalues,icemask,bordermask,baths,l):
 
 
 def closest_WOA_points_bfs(grid,baths,bedmach,debug=False):
+    print("bfs")
     bedvalues = bedmach.bed.values
     icemask = bedmach.icemask_grounded_and_shelves.values
     closest_points=[np.nan]*len(baths)
@@ -537,7 +468,6 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shel
     lines = []
     bedvalues = bedmap.bed.values
     prof_depths = np.asarray(range(100,1500,20))
-    test_profiles = generate_test_profiles(prof_depths)
     mask = np.zeros(salvals.shape[1:])
 
     mask[:]=np.inf
@@ -558,6 +488,8 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shel
             s = salvals[:,closest[0],closest[1]]
             lon,lat = projection(x,y,inverse=True)
             s = gsw.SA_from_SP(s,d,lon,lat)
+            #FOR MIMOC MAKE PT
+            #t = gsw.CT_from_pt(s,t)
             t = gsw.CT_from_t(s,t,d)
             line = ([physical[l][0],physical[l][1]],[centroid[0],centroid[1]])
             dist = np.sqrt((physical[l][1]-x)**2 + (physical[l][0]-y)**2)
@@ -572,7 +504,9 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shel
             elif quant=="thermdepth" and np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
                 heats[l]=therm_depth((tinterp,sinterp),baths[l],0.5)
             elif quant=="cdwdepth" and np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
-                heats[l]=profile_tester((tinterp,sinterp),baths[l],test_profiles,prof_depths,shelf_key=shelves[l])
+                heats[l]=pycnocline((tinterp,sinterp),baths[l],shelf_key=shelves[l])
+            elif quant=="newtemp" and np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
+                heats[l]=newtemp((tinterp,sinterp),baths[l],shelf_key=shelves[l])
             elif quant=="isopycnaldepth" and np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
                 if shelfkeys:
                     heats[l]=isopycnal_depth((tinterp,sinterp),baths[l],shelfkey=shelves[l])
@@ -734,9 +668,6 @@ def GLIB_by_shelf(GLIB,bedmach,polygons):
         print(glib_by_shelf[k])
     return glib_by_shelf
  
-
-
-def slopeFromClosestPoint(bedmap,icefront,grid,physical,depths,closest_points,shelf_keys,shelf_keys_edge,mode="euclid"):
     print("temp from closest point")
     slopes=[np.nan]*len(depths)
     projection = pyproj.Proj("epsg:3031")
@@ -765,8 +696,6 @@ def slopeFromClosestPoint(bedmap,icefront,grid,physical,depths,closest_points,sh
                     slopes[l] = np.nan 
 
     return slopes
-
-
 
 def slope_by_shelf(bedmach,polygons):
     GLIBmach = bedmach.bed.copy(deep=True)
@@ -807,6 +736,43 @@ def slope_by_shelf(bedmach,polygons):
         if k == "Cook" and False:
             plt.imshow(clipped)
             plt.show()
-        glib_by_shelf[k] = np.nanmean(grad)
+        #glib_by_shelf[k] = np.nanmedian(grad[grad<np.nanquantile(grad,0.75)])
+        glib_by_shelf[k] = np.nanmedian(grad)
+    plt.show()
+    return glib_by_shelf
+
+def volumes_by_shelf(bedmach,polygons):
+    GLIBmach = bedmach.bed.copy(deep=True)
+    print(bedmach)
+    GLIBmach.values[:] = (bedmach.surface.values[:]-bedmach.thickness.values[:])-bedmach.bed.values
+    GLIBmach.values[np.logical_or(bedmach.icemask_grounded_and_shelves==0,np.isnan(bedmach.icemask_grounded_and_shelves))]=np.nan
+    GLIBmach = GLIBmach.rio.write_crs("epsg:3031")
+    print(GLIBmach)
+    del GLIBmach.attrs['grid_mapping']
+    GLIBmach.rio.to_raster("data/glibmach.tif")
+
+    glib_by_shelf = {}
+    for k in tqdm(polygons.keys()):
+        raster = riox.open_rasterio('data/glibmach.tif')
+        gons = []
+        parts = polygons[k][1]
+        polygon = polygons[k][0]
+        if len(parts)>1:
+            parts.append(-1)
+            for l in range(0,len(parts)-1):
+                poly_path=shapely.geometry.Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T)#.buffer(10**4)
+                gons.append(poly_path)
+        else:
+            gons = [polygon]
+        print(k)
+        print("made it hearE")
+        clipped = raster.rio.clip(gons)[0]
+        clipped = np.asarray(clipped)
+        clipped[clipped<-9000] = np.nan
+        #grad = np.gradient(clipped)
+        if k == "Cook" and False:
+            plt.imshow(clipped)
+            plt.show()
+        glib_by_shelf[k] = np.nanmean(clipped)
     plt.show()
     return glib_by_shelf

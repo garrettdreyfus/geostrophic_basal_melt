@@ -89,8 +89,11 @@ def create_Pauthenet(bed,debug = True):
 def create_MIMOC(bed,debug = False):
    bedmap = bed
    salfname,tempfname = "data/woa18_decav81B0_s00_04.nc","data/woa18_decav81B0_t00_04.nc"
-   filename = "data/MIMOC_Z_GRID_v2.2wm_PT_S_month01.nc"
-   dataset = xarray.open_dataset(filename,decode_times=False)
+   winterfilename = "data/MIMOC_Z_GRID_v2.2wm_PT_S_month07.nc"
+   summerfilename = "data/MIMOC_Z_GRID_v2.2wm_PT_S_month01.nc"
+   dataset = xarray.open_dataset(winterfilename,decode_times=False)
+   datasetsummer = xarray.open_dataset(summerfilename,decode_times=False)
+   dataset.POTENTIAL_TEMPERATURE.values[:] = (dataset.POTENTIAL_TEMPERATURE.values[:] + datasetsummer.POTENTIAL_TEMPERATURE.values[:])/2.0
    dataset["POTENTIAL_TEMPERATURE"] = dataset.POTENTIAL_TEMPERATURE.expand_dims(dim={"t": 1})
    dataset = dataset.assign(time=[1])
    dataset["SALINITY"] = dataset.SALINITY.expand_dims(dim={"t": 1})
