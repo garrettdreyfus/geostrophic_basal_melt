@@ -85,13 +85,13 @@ def pycnocline(heat_function,hub,shelf_key=None):
     ti = moving_average(ti,50)
     si = moving_average(si,50)
     dizi = np.diff(di)/np.diff(zi)
-    thresh = np.quantile(dizi,0.98)
+    thresh = np.quantile(dizi,0.90)
     zpyc = np.mean(zi[1:][dizi>thresh])
     zpyci = np.argmin(np.abs(zi-zpyc))
     di = gsw.rho(si,ti,zpyc)-1000
     gprime = (np.nanmean(di[zpyci:]) - np.nanmean(di[:zpyci]))/np.nanmean(di[:])
 
-    if shelf_key == "Cook" and False:# and (-zpyc+hub) < 75:
+    if shelf_key == "Holmes" and True:# and (-zpyc+hub) < 75:
         fig,(ax1,ax2) = plt.subplots(1,2)
         ax1.plot(di,-zi)
         ax1.axhline(y=-zpyc,color="red",label="pyc")
