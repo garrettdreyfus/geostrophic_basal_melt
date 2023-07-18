@@ -15,6 +15,9 @@ import shapely
 def create_WOA(bed,debug = False):
    bedmap = bed
    salfname,tempfname = "data/woa18_decav81B0_s00_04.nc","data/woa18_decav81B0_t00_04.nc"
+   salfname,tempfname = "data/woa23_decav91C0_s00_04.nc","data/woa23_decav91C0_t00_04.nc"
+
+
    #salfname,tempfname = "data/woa18_decav_s15_04.nc","data/woa18_decav_t15_04.nc"
    sal = xarray.open_dataset(salfname,decode_times=False)
    temp = xarray.open_dataset(tempfname,decode_times=False)

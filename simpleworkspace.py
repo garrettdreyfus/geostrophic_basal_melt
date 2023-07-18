@@ -17,6 +17,7 @@ import cdw
 from scipy import interpolate
 from tqdm import tqdm
 import xarray as xr
+import pyproj
 import winds as wind
 
 # Create GLIB
@@ -45,7 +46,7 @@ with open("data/bedmachGLIB.pickle","rb") as f:
 with open("data/shelfpolygons.pickle","rb") as f:
     polygons = pickle.load(f)
 ################################################
-
+#bt.shelf_numbering(polygons,bedmach)
 ################################################
 
 if writeGL:
@@ -61,6 +62,23 @@ with open("data/woawithbed.pickle","rb") as f:
 
 with open("data/shelfnumbers.pickle","rb") as f:
     shelf_number_labels, shelf_numbers = pickle.load(f)
+
+
+print("starting")
+
+#xvals,yvals = np.meshgrid(bedmach.x,bedmach.y)
+#outproj = pyproj.Proj("epsg:4326")
+#inproj = pyproj.Proj("epsg:3031")
+#print("transform")
+#xvals,yvals = pyproj.transform(inproj,outproj,xvals,yvals)
+#MASK = {"lat":xvals,"lon":yvals,"mask":shelf_numbers,"names":shelf_number_labels}
+
+#with open("data/maskproduct.pickle","wb") as f:
+    #pickle.dump(MASK,f)
+
+with open("data/maskproduct.pickle","rb") as f:
+    MASK = pickle.load(f)
+
 
 depths = []
 glibs = []
@@ -83,6 +101,7 @@ glibheats = np.asarray([0]*len(physical))# cdw.tempFromClosestPoint(bedmach,grid
 with open("data/simple_shelf_thermals.pickle","rb") as f:
     glibheats = pickle.load(f)
 
+
 def explore_graph(glibheats,gbs,k):
     fig,(ax1,ax2) = plt.subplots(1,2)
     ax1.plot(glibheats[k][0],-glibheats[k][2])
@@ -91,8 +110,9 @@ def explore_graph(glibheats,gbs,k):
     ax2.axhline(gbs[k])
     plt.show()
 
-with open("data/new_massloss.pickle","rb") as f:
-    rignot_shelf_massloss = pickle.load(f)
+#with open("data/new_massloss.pickle","rb") as f:
+    #rignot_shelf_massloss = pickle.load(f)
+rignot_shelf_massloss,sigmas_by_shelf =  cdw.extract_adusumilli("data/Adusumilli.csv")
 
 with open("data/slopes_by_shelf.pickle","rb") as f:
     slopes_by_shelf = pickle.load(f)
@@ -108,6 +128,7 @@ with open("data/glib_by_shelf.pickle","rb") as f:
 tforce = []
 tforceg = []
 slopes = []
+sigmas = []
 r2013 = []
 #rignot_shelf_massloss,sigmas = cdw.extract_rignot_massloss2013("data/rignot2013.xlsx")
 labels = []
@@ -128,33 +149,43 @@ for k in tqdm(glibheats.keys()):
             tforce.append((np.asarray(icemean)[~np.isnan(icemean)].dot(draft_counts[~np.isnan(icemean)]))/np.sum(draft_counts[~np.isnan(icemean)]))
             tforceg.append((np.asarray(glibmean)[~np.isnan(glibmean)].dot(draft_counts[~np.isnan(glibmean)]))/np.sum(draft_counts[~np.isnan(glibmean)]))
             r2013.append(rignot_shelf_massloss[k])
+            sigmas.append(sigmas_by_shelf[k])
             labels.append(k)
             slopes.append(slopes_by_shelf[k])
 
-plt.scatter(np.asarray(tforce)*np.abs(tforce)*np.asarray(slopes),r2013)
-for l in range(len(labels)):
-    plt.annotate(labels[l],(tforce[l]*np.abs(tforce)*slopes[l],r2013[l]))
-plt.show()
-
+#melt_est_w_glib = np.abs(tforceg)*np.nanmean(tforceg)
+# plt.scatter(melt_est_w_glib,r2013)
+# plt.scatter(melt_est_w_glib,r2013)
+# plt.errorbar(melt_est_w_glib,r2013,yerr=sigmas,ls='none')
+# for l in range(len(labels)):
+#     plt.annotate(labels[l],(melt_est_w_glib[l],r2013[l]))
+# plt.show()
+#
 tforce = np.asarray(tforce)
 print(tforce)
-reg1 = LinearRegression().fit(np.asarray([tforce*np.abs(tforce)*slopes,tforce*np.abs(tforce)*slopes]).T, r2013)
+reg1 = LinearRegression().fit(np.asarray([melt_est_w_glib,melt_est_w_glib]).T, r2013)
 
-print(reg1.score(np.asarray([tforce*np.abs(tforce)*slopes,tforce*np.abs(tforce)*slopes]).T, r2013))
-tforce_est = reg1.predict(np.asarray([tforce*np.abs(tforce)*slopes,tforce*np.abs(tforce)*slopes]).T)
+print(reg1.score(np.asarray([melt_est_w_glib,melt_est_w_glib]).T, r2013))
+tforce_est = reg1.predict(np.asarray([melt_est_w_glib,melt_est_w_glib]).T)
 
 fig, (ax1) = plt.subplots(1,1)
 r2_score(r2013,tforce_est)
 ax1.scatter(tforce_est,r2013)
+plt.errorbar(tforce_est,r2013,yerr=sigmas,ls='none')
+plt.plot(range(30),range(30))
+for l in range(len(labels)):
+    plt.annotate(labels[l],(tforce_est[l],r2013[l]))
 plt.show()
 
-
-print(np.mean(np.abs(tforce_est-r2013)))
-print(np.mean(np.abs(tforceg_est-r2013)))
-plt.scatter(np.abs(tforce_est-r2013),np.abs(tforceg_est-r2013))
-plt.plot(range(20),range(20))
-plt.show()
-
+#
+# print(np.mean(np.abs(tforce_est-r2013)))
+# print(np.mean(np.abs(tforceg_est-r2013)))
+# plt.scatter(np.abs(tforce_est-r2013),np.abs(tforceg_est-r2013))
+# plt.plot(range(20),range(20))
+# for l in range(len(labels)):
+#     plt.annotate(labels[l],(tforce_est[l],r2013[l]))
+# plt.show()
+#
 slopes_by_shelf = bt.shelf_sort(shelf_keys,glibheats)
 gldepths_by_shelf = bt.shelf_sort(shelf_keys,depths)
 glibs_by_shelf = bt.shelf_sort(shelf_keys,glibs)

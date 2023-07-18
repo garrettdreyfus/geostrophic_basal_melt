@@ -10,9 +10,13 @@ from tqdm import tqdm
 import pickle
 from matplotlib.patches import Polygon
 import rioxarray as riox
+import cmocean
 from matplotlib.collections import PatchCollection
+from matplotlib.patches import Rectangle
+import matplotlib as mpl
 import rasterio
 import shapely
+from scipy.ndimage import label
 
 def grab_bottom(t,max_depth=500):
     tvalues = t.t_an.values
@@ -34,7 +38,7 @@ def grab_bottom(t,max_depth=500):
                 
 
 
-def overview_figure(downscale=5):
+def overview_figure(downscale=2):
 
     salfname,tempfname = "data/woa18_decav81B0_s00_04.nc","data/woa18_decav81B0_t00_04.nc"
     temp = xr.open_dataset(tempfname,decode_times=False)
@@ -83,6 +87,7 @@ def overview_figure(downscale=5):
 
 
     fig,ax = plt.subplots(1,1,figsize=(20,12))
+    ax.set_aspect('equal', 'box')
 
     icemask = bedmach.icemask_grounded_and_shelves.values
     bedmach.bed.values[icemask==0] = np.nan
@@ -90,7 +95,43 @@ def overview_figure(downscale=5):
     icemask[icemask==1] = np.nan
 
     ax.pcolormesh(bedmach.x.values[::downscale],bedmach.y.values[::downscale],icemask[::downscale,::downscale],cmap="gray",vmin=-0.5,vmax=0.5)
-    ax.contour(bedmach.x.values[::downscale],bedmach.y.values[::downscale],bedmach.bed.values[::downscale,::downscale],[-1500],colors=["white","green"])
+    CS = ax.contour(bedmach.x.values[::downscale],bedmach.y.values[::downscale],bedmach.bed.values[::downscale,::downscale],[-1500],colors=["white","green"])
+    depths = bedmach.bed.values[::downscale,::downscale]
+    labim, num = label(depths>-1500)
+    counts = []
+    for i in range(1,num):
+        counts.append(np.sum(labim==i))
+    print(counts)
+    #countmax = np.argmax(counts)+1
+    #print(counts[countmax])
+    #depths[labim!=countmax] = np.nan
+    #depths[depths<-1500]=np.nan
+    cx = ax.contourf(bedmach.x.values[::downscale],bedmach.y.values[::downscale],depths,[-1500,-1250,-1000,-750,-500,-250],zorder=2,vmin=-1500,vmax=-250,cmap=cmocean.cm.gray)
+    axins3 = inset_axes(
+        ax,
+        width="20%",  # width: 50% of parent_bbox width
+        height="3%",  # height: 5%
+        loc="upper right",
+    )
+    axins3.xaxis.set_ticks_position("bottom")
+    cbar3 = fig.colorbar(cx, cax=axins3, orientation="horizontal",ticks=[-400,-900,-1400])
+    cbar3.set_label("Depth of shelf")
+
+
+
+    for level in CS.collections:
+        maxlength =0 
+        maxlengthkp =0 
+        for kp,path in reversed(list(enumerate(level.get_paths()))):
+            length = np.max(path.vertices.shape)
+            if length>maxlength:
+                maxlength = length
+                maxlengthkp = kp
+
+        for kp,path in reversed(list(enumerate(level.get_paths()))):
+            if kp!=maxlengthkp:
+                del(level.get_paths()[kp])
+
     ax.set_xticks([],[])
     ax.set_yticks([],[])
 
@@ -106,11 +147,29 @@ def overview_figure(downscale=5):
     extent = [np.min(is_wb['x']),np.max(is_wb['x']),np.min(is_wb['y']),np.max(is_wb['y'])]
     X,Y = np.meshgrid(x_wb[::downscale],y_wb[::downscale])
     wb = wb[::downscale,::downscale]
-    c1 = ax.pcolormesh(X,Y,wb,vmin=-4,vmax=4,cmap="jet")
-    cbar1 = plt.colorbar(c1,ax=ax,fraction=0.046, pad=0.04)
+    c1 = ax.pcolormesh(X,Y,wb,zorder=3,vmin=-4,vmax=4,cmap=cmocean.cm.balance)
+    ax.axis('off')
+    axins1 = inset_axes(
+        ax,
+        width="20%",  # width: 50% of parent_bbox width
+        height="3%",  # height: 5%
+        loc="lower left",
+    )
+    axins1.xaxis.set_ticks_position("bottom")
+    cbar1 = fig.colorbar(c1, cax=axins1, orientation="horizontal",ticks=[-4,-2,0,2,4])
     cbar1.set_label("Melting in m/yr")
-    c2 = ax.pcolormesh(raster.x[::downscale],raster.y[::downscale],raster.values[0][::downscale,::downscale],cmap="magma")
-    cbar2 = plt.colorbar(c2,ax=ax,fraction=0.046, pad=0.04)
+
+
+    c2 = ax.pcolormesh(raster.x[::downscale],raster.y[::downscale],raster.values[0][::downscale,::downscale],zorder=0,cmap=cmocean.cm.algae,vmin=0,vmax=3)
+    axins2 = inset_axes(
+        ax,
+        width="20%",  # width: 50% of parent_bbox width
+        height="3%",  # height: 5%
+        loc="lower right",
+    )
+ 
+    axins2.xaxis.set_ticks_position("bottom")
+    cbar2 = fig.colorbar(c2, cax=axins2, orientation="horizontal",ticks=[0,1,2,3])
     cbar2.set_label("WOA temperature at 500m or Bottom")
 
     def build_bar(mapx, mapy, ax, width,title, xvals=['a','b','c'], yvals=[1,4,2], fcolors=[0,1]):
@@ -157,39 +216,62 @@ def overview_figure(downscale=5):
 
     #icemask[icemask==1]=np.nan
     #plt.pcolormesh(bedmach.x,bedmach.y,icemask)
-    fig.savefig("paperfigures/OverviewFigure.png")
+    print("saving")
+    fig.savefig("paperfigures/OverviewFigure.png",dpi=300)
     #plt.show()
 
 def hub_schematic_figure():
     with open("data/bedmach.pickle","rb") as f:
         bedmach = pickle.load(f)
-    icemask = bedmach.icemask_grounded_and_shelves.values[3400:6500,3400:6000]
+    icemask = bedmach.icemask_grounded_and_shelves.values[3400:6500,3400:6000-300]
     icemask = icemask[::-1,:]
     icemask[icemask==1]=np.nan
-    bedvalues = bedmach.bed.values[3400:6500,3400:6000]
+
+
+    bedvalues = bedmach.bed.values[3400:6500,3400:6000-300]
     bedvalues = bedvalues[::-1,:]
 
     fig, ax = plt.subplots(1,1)
 
-    c = ax.imshow(bedvalues,vmin=-2500,vmax=0,cmap="terrain",origin="lower")
-    plt.colorbar(c)
-    ax.contour(bedvalues,[-600,-575],colors=["green","red"],origin="lower")
-    ax.imshow(icemask,zorder=5,origin="lower")
+
+    newcmap = cmocean.tools.crop(cmocean.cm.topo, -2500, 0, 0)
+    c = ax.imshow(bedvalues,vmin=-2500,vmax=0,cmap=newcmap,origin="lower")
+    cbax = plt.colorbar(c,aspect=40,shrink=0.5)
+    tick_font_size = 16
+    cbax.ax.tick_params(labelsize=tick_font_size)
+    ax.contour(bedvalues,[-600,-575],colors=["green","red"],linestyles=["solid","dashed"],origin="lower",linewidths=3)
 
     ax.set_xticks([],[])
     ax.set_yticks([],[])
 
 
+    mapins = inset_axes(ax, width="30%", height="30%", loc='lower left',
+                   bbox_to_anchor=(0,0,1,1), bbox_transform=ax.transAxes)
+    mapins.add_patch(Rectangle((3400,3400),2300,3100,facecolor='red',alpha=0.5))
+
+
+    coarsefull = bedmach.icemask_grounded_and_shelves.values
+    coarsefull[coarsefull==1]=np.nan
+    mapins.imshow(coarsefull)
+    mapins.set_xticks([],[])
+    mapins.set_yticks([],[])
+
+    mpl.rcParams['axes.linewidth'] =5
     axins = ax.inset_axes([0.025, 0.5, 0.45, 0.45])
+    axins.spines['bottom'].set_color('white')
+    axins.spines['top'].set_color('white')
+    axins.spines['right'].set_color('white')
+    axins.spines['left'].set_color('white')
+    ax.imshow(icemask,zorder=5,origin="lower",cmap="Greys_r",vmin=-0.5,vmax=1)
     axins.set_xticklabels([])
     axins.set_xticks([],[])
     axins.set_yticks([],[])
     axins.set_yticklabels([])
     axins.set_xlim(1300,1650)
     axins.set_ylim(2500,2750)
-    axins.imshow(bedvalues,vmin=-2500,vmax=0,cmap="terrain",origin="lower")
-    axins.imshow(icemask,zorder=5,origin="lower")
-    axins.contour(bedvalues,[-600,-575],colors=["green","red"])
+    axins.imshow(bedvalues,vmin=-2500,vmax=0,cmap=newcmap,origin="lower")
+    axins.imshow(icemask,zorder=5,origin="lower",cmap="Greys_r")
+    axins.contour(bedvalues,[-600,-575],colors=["green","red"],linestyles=["solid","dashed"],linewidths=3)
     patch, lines = ax.indicate_inset_zoom(axins, edgecolor="black")
     lines[0].set_visible(True)
     lines[1].set_visible(True)
@@ -197,5 +279,5 @@ def hub_schematic_figure():
     lines[3].set_visible(True)
 
     plt.show()
-#hub_schematic_figure()
-overview_figure()
+hub_schematic_figure()
+#overview_figure(downscale=10)

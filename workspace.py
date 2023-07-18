@@ -14,6 +14,7 @@ from sklearn import tree
 import numpy as np
 from sklearn.metrics import r2_score
 import woa
+import matplotlib.colors as colors
 import cdw
 from tqdm import tqdm
 import xarray as xr
@@ -29,6 +30,14 @@ writeGL =False
 createWOA = False
 createClosestWOA = False
 
+with open("data/shelfpolygons.pickle","rb") as f:
+    polygons = pickle.load(f)
+
+#rignot_shelf_massloss =  bt.shelf_mass_loss("",polygons)
+
+#with open("data/onlypositivemelt.pickle","wb") as f:
+    #pickle.dump(rignot_shelf_massloss,f)
+
 ###############################################
 if writeBedMach:
     print("Grabbing BedMachine Data")
@@ -43,7 +52,11 @@ with open("data/bedmach.pickle","rb") as f:
 bedvalues = bedmach.bed.values
 icemask = bedmach.icemask_grounded_and_shelves.values
 
-
+#GLIBregions = GLIB.generateGLIBsLabel(bedvalues,icemask)
+##with open("data/bedmachGLIBregions.pickle","wb") as f:
+    #pickle.dump(GLIBregions,f)
+with open("data/bedmachGLIBregions.pickle","rb") as f:
+    GLIBregions = pickle.load(f)
 ##################################################
 
 ##################################################
@@ -57,6 +70,11 @@ if writeGLIB:
 
 with open("data/bedmachGLIB.pickle","rb") as f:
     GLIB = pickle.load(f)
+
+#cmap = ListedColormap ( np.random.rand ( 256,3))
+#plt.imshow(GLIB,cmap=cmap)
+#plt.show()
+
 
 
 ##################################################
@@ -92,7 +110,6 @@ if writeGL:
 
 with open("data/groundinglinepoints.pickle","rb") as f:
     physical,grid,depths,shelves,shelf_keys = pickle.load(f)
-
 
 ################################################
 
@@ -140,13 +157,23 @@ with open("data/physical_ice.pickle","rb") as f:
     physical_ice,shelf_keys_edge = pickle.load(f)
 
 #slopes = cdw.slopeFromClosestPoint(bedmach,physical_ice,grid,physical,depths,closest_points,shelf_keys,shelf_keys_edge)
-#glibheats = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="glibheat")
+#glibheats = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="glibheat",debug=False)
 #layertemp = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="newtemp")
 #hubsalts = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="glibheat")
-#cdwdepths = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="cdwdepth")
+#gprimes = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="gprime")
+#cdwdepths = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="cdwdepth",debug=True)
 #distances = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="distance")
 #isopycnaldepths = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="thermocline",shelfkeys=shelf_keys)
-physical = np.asarray(physical)
+#physical = np.asarray(physical)
+#grid = np.asarray(grid)
+#plt.scatter(grid.T[0][40000:80000],grid.T[1][40000:80000],c=range(grid.shape[0])[40000:80000])
+#plt.colorbar()
+#plt.scatter(grid.T[0][40000:80000],grid.T[1][40000:80000],c="red")
+#for l in range(40000,80000,100):
+    #plt.annotate(l,(grid.T[0,l],grid.T[1,l]))
+#plt.show()
+glibheats = cdw.closestMethodologyFig(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="glibheat",debug=False)
+exit()
 ##with open("data/distances.pickle","wb") as f:
     #pickle.dump(distances,f)
 with open("data/distances.pickle","rb") as f:
@@ -173,13 +200,18 @@ with open("data/hub_shelf_salts.pickle","rb") as f:
 with open("data/cdwdepths.pickle","rb") as f:
     cdwdepths = pickle.load(f)
 
+#with open("data/gprimes.pickle","wb") as f:
+    #pickle.dump(gprimes,f)
+with open("data/gprimes.pickle","rb") as f:
+    gprimes = pickle.load(f)
+
 #with open("data/isopycnaldepths.pickle","wb") as f:
     #pickle.dump(isopycnaldepths,f)
 with open("data/isopycnaldepths.pickle","rb") as f:
     isopycnaldepths = pickle.load(f)
 
 #slopes_by_shelf = cdw.slope_by_shelf(bedmach,polygons)
-#
+
 #with open("data/slopes_by_shelf.pickle","wb") as f:
     #pickle.dump(slopes_by_shelf,f)
 with open("data/slopes_by_shelf.pickle","rb") as f:
@@ -189,21 +221,39 @@ with open("data/slopes_by_shelf.pickle","rb") as f:
 
 #with open("data/volumes_by_shelf.pickle","wb") as f:
     #pickle.dump(volumes_by_shelf,f)
-with open("data/volumes.pickle","rb") as f:
+with open("data/volumes_by_shelf.pickle","rb") as f:
     volumes_by_shelf = pickle.load(f)
 
-#polyna_by_shelf = cdw.polyna_dataset(polygons)
-#with open("data/polyna_by_shelf.pickle","wb") as f:
-    #pickle.dump(polyna_by_shelf,f)
-with open("data/polyna_by_shelf.pickle","rb") as f:
-    polyna_by_shelf = pickle.load(f)
+#polynas = cdw.polyna_bathtub(bedmach,grid,GLIBregions)
+#with open("data/polynasbt.pickle","wb") as f:
+    #pickle.dump(polynas,f)
+with open("data/polynas.pickle","rb") as f:
+    polynas = pickle.load(f)
+
+#polynas = cdw.polyna_bathtub(bedmach,grid,GLIBregions)
+#with open("data/polynasbt.pickle","wb") as f:
+    #pickle.dump(polynas,f)
+#with open("data/polynas.pickle","rb") as f:
+    #polynas = pickle.load(f)
+
+
 #glibheats = np.asarray(glibheats)*np.asarray(isopycnaldepths)
 
+projection = pyproj.Proj("epsg:3031")
+fs = []
+for x,y in physical:
+        lon,lat = projection(x,y,inverse=True)
+        fs.append(1/np.abs(gsw.f(lat)))
 
-hubheats_by_shelf = bt.shelf_sort(shelf_keys,glibheats)
+polynas=np.asarray(polynas)
+
+fs_by_shelf = bt.shelf_sort(shelf_keys,fs)
+hubheats_by_shelf = bt.shelf_sort(shelf_keys,np.asarray(glibheats))
 salts_by_shelf = bt.shelf_sort(shelf_keys,hubsalts)
+polyna_by_shelf = bt.shelf_sort(shelf_keys,polynas)
 #slopes_by_shelf = bt.shelf_sort(shelf_keys,slopes)
 cdws_by_shelf = bt.shelf_sort(shelf_keys,cdwdepths)
+gprimes_by_shelf = bt.shelf_sort(shelf_keys,gprimes)
 isopycnaldepth_by_shelf = bt.shelf_sort(shelf_keys,isopycnaldepths)
 gldepths_by_shelf = bt.shelf_sort(shelf_keys,depths)
 glibs_by_shelf = bt.shelf_sort(shelf_keys,glibs)
@@ -211,15 +261,23 @@ distances_by_shelf = bt.shelf_sort(shelf_keys,glibs)
 hubdeltas_by_shelf = bt.shelf_sort(shelf_keys,np.asarray(depths)-np.asarray(baths))
 winds_by_shelf = wind.AMPS_wind(polygons,"data/AMPS_winds.mat",icemask)
 #rignot_shelf_massloss,rignot_shelf_areas,sigma = cdw.extract_rignot_massloss2019("data/rignot2019.xlsx")
-#rignot_shelf_massloss,sigmas = cdw.extract_rignot_massloss2013("data/rignot2013.xlsx")
+#rignot_shelf_massloss,sigmas_by_shelf = cdw.extract_rignot_massloss2013("data/rignot2013.xlsx")
 #rignot_shelf_massloss = bt.shelf_mass_loss('data/amundsilli.h5',polygons)
 #with open("data/new_massloss.pickle","wb") as f:
     #pickle.dump(rignot_shelf_massloss,f)
 #with open("data/new_massloss.pickle","rb") as f:
     #rignot_shelf_massloss = pickle.load(f)
-
 rignot_shelf_massloss,sigmas_by_shelf =  cdw.extract_adusumilli("data/Adusumilli.csv")
-print(rignot_shelf_massloss.keys())
+#rignot_shelf_massloss =  bt.shelf_mass_loss("",polygons)
+
+#with open("data/onlypositivemelt.pickle","wb") as f:
+    #pickle.dump(rignot_shelf_massloss,f)
+#with open("data/onlypositivemelt.pickle","rb") as f:
+    #rignot_shelf_massloss = pickle.load(f)
+
+
+
+#print(rignot_shelf_massloss.keys())
 
 
 #with open("data/hub_shelf_massloss.pickle","wb") as f:
@@ -239,9 +297,11 @@ isopycnals = []
 ys = []
 gldepths = []
 glibshelf=[]
+gprimes=[]
 distances = []
 hubdeltas = []
 polynas = []
+gllengths=[]
 winds = []
 salts = []
 
@@ -260,19 +320,18 @@ sigmas = []
     ##MSDS = pickle.load(f)
 #
 labels = []
-projection = pyproj.Proj("epsg:3031")
 for k in slopes_by_shelf.keys():
     if k in rignot_shelf_massloss and ~np.isnan(rignot_shelf_massloss[k]):
         x,y = (polygons[k][0].centroid.x,polygons[k][0].centroid.y)
-        lon,lat = projection(x,y,inverse=True)
-        fs.append(1/np.abs(gsw.f(lat)))
         slopes.append(slopes_by_shelf[k])
         volumes.append(volumes_by_shelf[k])
         labels.append(k)
+        fs.append(np.nanmean(fs_by_shelf[k]))
         thermals.append(np.nanmean(hubheats_by_shelf[k]))
         cdws.append(np.nanmean(cdws_by_shelf[k]))
         isopycnals.append(np.nanmean(isopycnaldepth_by_shelf[k]))
         gldepths.append(np.nanmean(gldepths_by_shelf[k]))
+        gprimes.append(np.nanmean(gprimes_by_shelf[k]))
         glibshelf.append(np.nanmean(glibs_by_shelf[k]))
         distances.append(np.nanmean(distances_by_shelf[k]))
         hubdeltas.append(np.nanmean(hubdeltas_by_shelf[k]))
@@ -287,6 +346,28 @@ for k in slopes_by_shelf.keys():
 #plt.scatter(np.asarray(thermals)*np.asarray(cdws)*slopes,mys,c=gldepths)
 #plt.errorbar(np.asarray(thermals)*np.asarray(cdws)*slopes,mys,yerr=sigmas,ls='none')
 #plt.show()
+
+# plt.scatter(np.asarray(thermals),mys)
+# for k in range(len(labels)):
+#     plt.annotate(labels[k],(np.asarray(thermals[k]),mys[k]))
+#
+# plt.show()
+#
+# plt.scatter(np.asarray(thermals)*np.asarray(cdws)*np.asarray(gprimes)*fs,mys)
+# for k in range(len(labels)):
+#     plt.annotate(labels[k],(np.asarray(thermals)[k]*np.asarray(cdws)[k]*np.asarray(gprimes)[k]*fs[k],mys[k]))
+# plt.show()
+#
+#
+# plt.scatter(np.asarray(thermals)*np.asarray(cdws)*np.asarray(gprimes)*fs*np.asarray(slopes),mys)
+# for k in range(len(labels)):
+#     plt.annotate(labels[k],(slopes[k]*np.asarray(thermals)[k]*np.asarray(cdws)[k]*np.asarray(gprimes)[k]*fs[k],mys[k]))
+# plt.show()
+#
+
+
+
+
 if False:
     plt.scatter(np.asarray(thermals),mys)
     plt.errorbar(np.asarray(thermals),mys,yerr=sigmas,ls='none')
@@ -318,65 +399,72 @@ if False:
 
 
 
-
-fig, ((ax1,ax2),(ax3,ax4)) = plt.subplots(2,2)
-ax1.scatter(np.asarray(thermals),mys,c=salts)
-ax1.set_xlabel("Avg temp at HUB")
-ax1.set_ylabel("Melt (m/yr)")
-ax2.scatter(np.asarray(cdws),mys,c=thermals)
-ax2.set_xlabel("Avg depth of thermocline above HUB * delta t")
-ax3.scatter(np.asarray(slopes),mys,c=thermals)
-ax3.set_xlabel("Avg depth of thermocline above HUB * delta t")
-melts = cdws*np.asarray(thermals)*slopes 
-ax4.scatter(melts,mys,c=gldepths)
-ax4.errorbar(melts,mys,yerr=sigmas,ls='none')
-ax4.set_xlabel("Avg depth of thermocline * avg temp above HUB * delta t")
+#
+# fig, ((ax1,ax2),(ax3,ax4)) = plt.subplots(2,2)
+# ax1.scatter(np.asarray(thermals),mys,c=salts)
+# ax1.set_xlabel("Avg temp at HUB")
+# ax1.set_ylabel("Melt (m/yr)")
+# ax2.scatter(np.asarray(cdws),mys,c=thermals)
+# ax2.set_xlabel("Avg depth of thermocline above HUB * delta t")
+# ax3.scatter(np.asarray(slopes),mys,c=thermals)
+# ax3.set_xlabel("Avg depth of thermocline above HUB * delta t")
+#plt.plot(range(30),range(30))
+#plt.show()
+areas = np.asarray(areas)
+melts = cdws*np.asarray(thermals)*np.asarray(fs)*(np.asarray(gprimes))*slopes
+melts=melts
+mys=mys
+#melts = np.asarray(thermals)*slopes
+rho0 = 1025
+Cp = 3850
+spy = (3.154*10**7)
+melten = 3.34*10**5
+kgtom = 920
+C= 0.00002
+#plt.scatter(melts*(rho0*spy*Cp*C)/(melten*kgtom),mys)
+plt.rc('axes', titlesize=24)     # fontsize of the axes title
+xs = np.asarray(([melts])).reshape((-1, 1))
+model = LinearRegression().fit(xs, mys)
+r2 = model.score(xs,mys)
+melts = model.predict(xs)
+plt.scatter(melts,mys)
+plt.errorbar(melts,mys,yerr=sigmas,ls='none')
+plt.xticks(fontsize=12)
+plt.yticks(fontsize=12)
+plt.plot(range(30),range(30))
+plt.text(.05, .95, '$r^2=$'+str(round(r2,2)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
+plt.xlabel(r"$\dot{m}_{pred} (m/yr)$",fontsize=18)
+plt.ylabel(r'$\dot{m}_{obs} (m/yr)$',fontsize=18)
 for k in range(len(labels)):
-    ax1.annotate(labels[k],(thermals[k],mys[k]))
-    ax2.annotate(labels[k],(np.asarray(cdws[k]),mys[k]))
-    ax3.annotate(labels[k],(np.asarray(slopes[k]),mys[k]))
-    ax4.annotate(labels[k],(melts[k],mys[k]))
+     plt.annotate(labels[k],(melts[k],mys[k]))
 plt.show()
-if True:
-    ##xs = np.asarray([np.asarray(np.sqrt(areas)),np.asarray(thermals)**2])
-    #xs = np.asarray(([np.asarray(thermals)*np.abs(thermals),np.asarray(np.sqrt(areas)),(np.asarray(thermals)**2)*np.asarray(np.sqrt(areas))]))
-    print(thermals)
-    #xs = np.asarray(([np.exp(thermals),np.exp(thermals)])).T
-    xs = np.asarray(([melts])).reshape((-1, 1))
-    #xs = np.asarray(([np.asarray(thermals),thermals]))
-    #scaler = preprocessing.StandardScaler().fit(xs.T)
-    #xs = scaler.transform(xs.T)
-    print(mys)
-    sigmas = np.asarray(sigmas)
-    model = LinearRegression().fit(xs, mys,(2/sigmas))
-    #r_sq = model.coef_#score(xs.reshape((-1, 1)), ys)
-    print(model.coef_)
-    #xs = np.asarray(xs)/r_sq
+xs=model.predict(xs)
+
+if False:
     oldxs = xs
     xs = model.predict(xs)
-    print("RMSE",np.sqrt(np.mean((mys-xs)**2)))
-    print("RMSE",np.sqrt(np.mean(((mys-xs)/mys)**2)))
-    print("r2,", model.score(oldxs,mys,(2/sigmas)))
-    tempterms = np.asarray(cdws) * np.asarray(thermals)
+    tempterms = cdws*np.asarray(thermals)*np.asarray(fs)*np.asarray(gprimes)
     x = np.linspace(np.min(tempterms)*0.95,np.max(tempterms)*1.05,20)
     y = np.linspace(np.min(slopes)*0.95,np.max(slopes)*1.05,20)
     X,Y = np.meshgrid(x,y)
     Z = np.multiply(X,Y)*model.coef_[0]+model.intercept_
     im = plt.pcolormesh(X,Y,Z,cmap="gnuplot",vmin=np.min(Z),vmax=np.max(Z))
     cbar = plt.colorbar(im)
-    cbar.set_label('Melt in m/yr', rotation=270)
     CS = plt.contour(X,Y,Z,levels=[1,2.5,5,10,15,20],colors="white")
     plt.clabel(CS, CS.levels, inline=True, fontsize=10)
+
+    plt.xticks(fontsize=12)
+    plt.yticks(fontsize=12)
+    plt.xlabel(r"$(T_{CDW}-T_{f})*(H_{PYC}-H_{HUB})*\frac{g'}{f}$",fontsize=18)
+    plt.ylabel(r'$S_{ice}$',fontsize=18)
     plt.scatter(tempterms,slopes,c="white")
-    plt.xlabel("T at hub * CDW height")
-    plt.ylabel("Slope")
     for k in range(len(labels)):
         plt.annotate(labels[k],(tempterms[k],slopes[k]),c="white")
     plt.show()
 
 if False:
     xs = np.asarray(([-np.asarray(cdws)*np.asarray(thermals)*np.asarray(slopes),np.asarray(thermals),\
-       np.asarray(polynas),np.asarray(winds),np.asarray(gldepths)\
+       np.asarrayTrue(polynas),np.asarray(winds),np.asarray(gldepths)\
     ]))
     #scaler = preprocessing.StandardScaler().fit(xs.T)
     #xs = scaler.transform(xs.T)
@@ -391,12 +479,40 @@ if False:
 #
 #
 #plt.errorbar(xs,mys,yerr=bars,fmt="o")
-plt.scatter(xs,mys)
+plt.scatter(xs,mys,c=polynas)
 plt.errorbar(xs,mys,yerr=sigmas,ls="none")
 for k in range(len(labels)):
     plt.annotate(labels[k],(xs[k],mys[k]))
 plt.plot(range(30),range(30))
 ##plt.colorbar()
+plt.show()
+
+xs = np.asarray(xs)
+polynas = np.asarray(polynas)
+mys = np.asarray(mys)
+labels = np.asarray(labels)
+gldepths = np.asarray(gldepths)
+glibs = np.asarray(glibshelf)
+sigmas = np.asarray(sigmas)
+slopes = np.asarray(slopes)
+areas = np.asarray(areas)
+winds = np.asarray(winds)
+volumes = np.asarray(volumes)
+thermals = np.asarray(thermals)
+hubdeltas = np.asarray(hubdeltas)
+
+# plt.scatter(polynas[xs<2.5]/areas[xs<2.5],mys[xs<2.5],c=polynas[xs<2.5])
+# plt.errorbar(xs[xs<2.5]/areas[xs<2.5],mys[xs<2.5],yerr=sigmas[xs<2.5],ls="none")
+# for k in range(len(labels[xs<2.5])):
+#     plt.annotate(labels[xs<2.5][k],(polynas[xs<2.5][k]/areas[xs<2.5][k],mys[xs<2.5][k]))
+thresh = 3
+freezingtemps = gsw.CT_freezing(34.7,np.abs(gldepths),0)
+newxs = ((volumes)*(slopes))[xs<thresh]
+plt.scatter(newxs,mys[xs<thresh],c=xs[xs<thresh],cmap="jet")
+plt.errorbar(newxs,mys[xs<thresh],yerr=sigmas[xs<thresh],ls="none")
+for k in range(len(labels[xs<thresh])):
+    plt.annotate(labels[xs<thresh][k],(newxs[k],mys[xs<thresh][k]))
+# ##plt.colorbar()
 plt.show()
 #
 #
