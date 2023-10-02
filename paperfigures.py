@@ -102,11 +102,12 @@ def overview_figure(downscale=2):
     for i in range(1,num):
         counts.append(np.sum(labim==i))
     print(counts)
-    #countmax = np.argmax(counts)+1
+    countmax = np.argmax(counts)+1
     #print(counts[countmax])
-    #depths[labim!=countmax] = np.nan
+    depths[labim!=countmax] = np.nan
     #depths[depths<-1500]=np.nan
-    cx = ax.contourf(bedmach.x.values[::downscale],bedmach.y.values[::downscale],depths,[-1500,-1250,-1000,-750,-500,-250],zorder=2,vmin=-1500,vmax=-250,cmap=cmocean.cm.gray)
+    newcmap = cmocean.tools.crop(cmocean.cm.topo, -2500, 0, 0)
+    cx = ax.contourf(bedmach.x.values[::downscale],bedmach.y.values[::downscale],depths,[-1500,-1250,-1000,-750,-500,-250],zorder=2,vmin=-1500,vmax=-250,cmap=newcmap)
     axins3 = inset_axes(
         ax,
         width="20%",  # width: 50% of parent_bbox width
@@ -115,7 +116,7 @@ def overview_figure(downscale=2):
     )
     axins3.xaxis.set_ticks_position("bottom")
     cbar3 = fig.colorbar(cx, cax=axins3, orientation="horizontal",ticks=[-400,-900,-1400])
-    cbar3.set_label("Depth of shelf")
+    cbar3.set_label("Continental shelf elevation (m)")
 
 
 
@@ -157,10 +158,10 @@ def overview_figure(downscale=2):
     )
     axins1.xaxis.set_ticks_position("bottom")
     cbar1 = fig.colorbar(c1, cax=axins1, orientation="horizontal",ticks=[-4,-2,0,2,4])
-    cbar1.set_label("Melting in m/yr")
+    cbar1.set_label("Basal melt rate (m/yr)")
 
 
-    c2 = ax.pcolormesh(raster.x[::downscale],raster.y[::downscale],raster.values[0][::downscale,::downscale],zorder=0,cmap=cmocean.cm.algae,vmin=0,vmax=3)
+    c2 = ax.pcolormesh(raster.x[::downscale],raster.y[::downscale],raster.values[0][::downscale,::downscale],zorder=0,cmap=cmocean.cm.thermal,vmin=0,vmax=3)
     axins2 = inset_axes(
         ax,
         width="20%",  # width: 50% of parent_bbox width
@@ -170,7 +171,7 @@ def overview_figure(downscale=2):
  
     axins2.xaxis.set_ticks_position("bottom")
     cbar2 = fig.colorbar(c2, cax=axins2, orientation="horizontal",ticks=[0,1,2,3])
-    cbar2.set_label("WOA temperature at 500m or Bottom")
+    cbar2.set_label("WOA temperature at 500m ($^\circ$C)")
 
     def build_bar(mapx, mapy, ax, width,title, xvals=['a','b','c'], yvals=[1,4,2], fcolors=[0,1]):
         ax_h = inset_axes(ax, width=width, \
@@ -279,5 +280,5 @@ def hub_schematic_figure():
     lines[3].set_visible(True)
 
     plt.show()
-hub_schematic_figure()
-#overview_figure(downscale=10)
+#hub_schematic_figure()
+overview_figure(downscale=2)

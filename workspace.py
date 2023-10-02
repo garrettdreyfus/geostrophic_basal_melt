@@ -71,9 +71,9 @@ if writeGLIB:
 with open("data/bedmachGLIB.pickle","rb") as f:
     GLIB = pickle.load(f)
 
-#cmap = ListedColormap ( np.random.rand ( 256,3))
-#plt.imshow(GLIB,cmap=cmap)
-#plt.show()
+cmap = ListedColormap ( np.random.rand ( 256,3))
+plt.imshow(GLIB,cmap=cmap)
+plt.show()
 
 
 
@@ -172,8 +172,8 @@ with open("data/physical_ice.pickle","rb") as f:
 #for l in range(40000,80000,100):
     #plt.annotate(l,(grid.T[0,l],grid.T[1,l]))
 #plt.show()
-glibheats = cdw.closestMethodologyFig(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="glibheat",debug=False)
-exit()
+#glibheats = cdw.closestMethodologyFig(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="glibheat",debug=False)
+#exit()
 ##with open("data/distances.pickle","wb") as f:
     #pickle.dump(distances,f)
 with open("data/distances.pickle","rb") as f:
@@ -427,20 +427,25 @@ xs = np.asarray(([melts])).reshape((-1, 1))
 model = LinearRegression().fit(xs, mys)
 r2 = model.score(xs,mys)
 melts = model.predict(xs)
-plt.scatter(melts,mys)
-plt.errorbar(melts,mys,yerr=sigmas,ls='none')
+ax = plt.gca()
+ax.scatter(melts,mys)
+ax.errorbar(melts,mys,yerr=sigmas,ls='none')
+ax.set_xlim(0,5)
+ax.set_ylim(0,5)
 plt.xticks(fontsize=12)
 plt.yticks(fontsize=12)
-plt.plot(range(30),range(30))
-plt.text(.05, .95, '$r^2=$'+str(round(r2,2)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
-plt.xlabel(r"$\dot{m}_{pred} (m/yr)$",fontsize=18)
-plt.ylabel(r'$\dot{m}_{obs} (m/yr)$',fontsize=18)
-for k in range(len(labels)):
-     plt.annotate(labels[k],(melts[k],mys[k]))
-plt.show()
-xs=model.predict(xs)
+ax.plot(range(30),range(30))
+ax.text(.05, .95, '$r^2=$'+str(round(r2,2)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
+ax.set_xlabel(r"$\dot{m}_{\mathrm{pred}} (m/yr)$",fontsize=18)
+ax.set_ylabel(r'$\dot{m}_{\mathrm{obs}} (m/yr)$',fontsize=18)
 
-if False:
+for k in range(len(labels)):
+     if not not(melts[k]<5 and mys[k]<5):
+        ax.annotate(labels[k],(melts[k],mys[k]))
+
+plt.show()
+
+if True:
     oldxs = xs
     xs = model.predict(xs)
     tempterms = cdws*np.asarray(thermals)*np.asarray(fs)*np.asarray(gprimes)
@@ -455,42 +460,29 @@ if False:
 
     plt.xticks(fontsize=12)
     plt.yticks(fontsize=12)
-    plt.xlabel(r"$(T_{CDW}-T_{f})*(H_{PYC}-H_{HUB})*\frac{g'}{f}$",fontsize=18)
-    plt.ylabel(r'$S_{ice}$',fontsize=18)
+    #plt.xlabel(r"$(T_{\mathrm{CDW}}-T_{\mathrm{f}})*(H_{\mathrm{PYC}}-H_{\mathrm{HUB}})*\frac{g'}{f}$",fontsize=18)
+    plt.xlabel(r"Hydrographic terms $(C m^{2} s^{-1})$",fontsize=18)
+    #plt.ylabel(r'$S_{\mathrm{ice}}$',fontsize=20)
+    plt.ylabel(r'Ice shelf slope $(m^{-1})$',fontsize=20)
     plt.scatter(tempterms,slopes,c="white")
     for k in range(len(labels)):
         plt.annotate(labels[k],(tempterms[k],slopes[k]),c="white")
     plt.show()
-
-if False:
-    xs = np.asarray(([-np.asarray(cdws)*np.asarray(thermals)*np.asarray(slopes),np.asarray(thermals),\
-       np.asarrayTrue(polynas),np.asarray(winds),np.asarray(gldepths)\
-    ]))
-    #scaler = preprocessing.StandardScaler().fit(xs.T)
-    #xs = scaler.transform(xs.T)
-    xs = xs.T
-    model = DecisionTreeRegressor(max_depth=3,min_samples_leaf=10).fit(xs, np.asarray(mys))
-    export_graphviz(Truemodel,out_file="tree.dot",feature_names = ["full equation","thermal","polynas","winds","gldepths"])
-    print(model.feature_importances_)
-    xs = model.predict(xs)
-    print("r2,", r2_score(mys,xs))
-    print(3)
-
-#
-#
+#xs=model.predict(xs)
 #plt.errorbar(xs,mys,yerr=bars,fmt="o")
-plt.scatter(xs,mys,c=polynas)
-plt.errorbar(xs,mys,yerr=sigmas,ls="none")
-for k in range(len(labels)):
-    plt.annotate(labels[k],(xs[k],mys[k]))
-plt.plot(range(30),range(30))
-##plt.colorbar()
-plt.show()
+#plt.scatter(xs,mys,c=polynas)
+#plt.errorbar(xs,mys,yerr=sigmas,ls="none")
+#for k in range(len(labels)):
+    #plt.annotate(labels[k],(xs[k],mys[k]))
+#plt.plot(range(30),range(30))
+###plt.colorbar()
+#plt.show()
 
 xs = np.asarray(xs)
 polynas = np.asarray(polynas)
 mys = np.asarray(mys)
 labels = np.asarray(labels)
+distances = np.asarray(distances)
 gldepths = np.asarray(gldepths)
 glibs = np.asarray(glibshelf)
 sigmas = np.asarray(sigmas)
@@ -507,7 +499,18 @@ hubdeltas = np.asarray(hubdeltas)
 #     plt.annotate(labels[xs<2.5][k],(polynas[xs<2.5][k]/areas[xs<2.5][k],mys[xs<2.5][k]))
 thresh = 3
 freezingtemps = gsw.CT_freezing(34.7,np.abs(gldepths),0)
-newxs = ((volumes)*(slopes))[xs<thresh]
+distances = distances/np.nanmax(distances)
+#newxs = ((e^(-distances)))[xs<thresh]/distances[xs<thresh]
+ms=np.linspace(0,1,1000)
+ms = 1 / (2*np.sqrt(2)) * (3*(1 - ms)**(4/3) - 1) * np.sqrt(1 - (1 - ms)**(4/3))
+M = np.cumsum(ms)[::-1]
+dnormal = np.abs(distances)/(np.nanmax(np.abs(distances)))*0.6
+newxs = []
+for i in dnormal:
+    newxs.append(M[int(i*1000)+400-1]/i)
+newxs = np.asarray(newxs)
+newxs=newxs[xs<thresh]
+#newxs = -((1-(np.exp(-distances/(np.nanmax(distances))))))[xs<thresh]/(-distances[xs<thresh]/(np.nanmax(distances[xs<thresh])))
 plt.scatter(newxs,mys[xs<thresh],c=xs[xs<thresh],cmap="jet")
 plt.errorbar(newxs,mys[xs<thresh],yerr=sigmas[xs<thresh],ls="none")
 for k in range(len(labels[xs<thresh])):

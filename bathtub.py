@@ -7,6 +7,7 @@ import copy
 import numpy as np
 import itertools
 import pickle
+import pyproj 
 from tqdm import tqdm
 from shapely.geometry import Polygon, Point
 import matplotlib
@@ -90,14 +91,17 @@ def shelf_mass_loss(dsfname,polygons,firstrun=False):
                 gons.append(poly_path)
         else:
             gons = [polygon]
-        print(k)
-        print("made it hearE")
         clipped = raster.rio.clip(gons,from_disk=True,all_touched=True)
+        print(k," clipped")
+
         if k == "Shackleton":
             plt.imshow(clipped[0])
             plt.colorbar()
             plt.show()
-        melt_rates[k] = np.nanmean(clipped[0])
+        if ~np.isnan(clipped).all():
+            melt = np.asarray(clipped[0])
+            melt_rates[k] = np.nanmean(melt[melt>0])
+            del melt
         del clipped
 
     return melt_rates
@@ -226,10 +230,11 @@ def shelf_numbering(polygons,bed):
     shelf_numbers = bed.icemask_grounded_and_shelves.copy(deep=True).values
     mach = mach.rio.write_crs("epsg:3031")
 
+    projection = pyproj.Proj("epsg:3031")
     del mach.attrs['grid_mapping']
     mach.rio.to_raster("data/shelfnumberraster.tif")
 
-    for k in tqdm(polygons.keys()):
+    for k in tqdm(list(polygons.keys())[:10]):
         gons = []
         parts = polygons[k][1]
         polygon = polygons[k][0]
@@ -246,5 +251,10 @@ def shelf_numbering(polygons,bed):
         shelf_numbers[np.where(x[0]==1)]=shelf_count
         shelf_number_labels[k]=shelf_count
         shelf_count+=1
+
+    X,Y = np.meshgrid(bed.x.values,bed.y.values)
+    lon,lat = projection(X,Y,inverse=True)
+    print(lon,lat)
+
     return shelf_number_labels, shelf_numbers
 

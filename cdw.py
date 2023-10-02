@@ -999,8 +999,8 @@ def volumes_by_shelf(bedmach,polygons):
 
 
 def closestMethodologyFig(bedmap,grid,physical,baths,closest_points,sal,temp,shelves,debug=False,quant="glibheat",shelfkeys=None,point_i=55900):
-    plt.figure(figsize=(18,8))
-    gs = gridspec.GridSpec(1, 2, width_ratios=[4, 1])
+    plt.figure(figsize=(18,5))
+    gs = gridspec.GridSpec(1, 2, width_ratios=[5, 1])
     ax,sideax = plt.subplot(gs[0]),plt.subplot(gs[1])
     print("temp from closest point")
     heats=[np.nan]*len(baths)
@@ -1071,9 +1071,9 @@ def closestMethodologyFig(bedmap,grid,physical,baths,closest_points,sal,temp,she
 
 
     CS = ax.contour(Xcrop,Ycrop,lats,5,colors="white",zorder=10)
-    ax.clabel(CS, CS.levels, inline=True, fmt=latfmt, fontsize=10)
+    ax.clabel(CS, CS.levels, inline=True, fmt=latfmt, fontsize=16)
     CS = ax.contour(Xcrop,Ycrop,lons,5,colors="white",zorder=10)
-    ax.clabel(CS, CS.levels, inline=True, fmt=lonfmt, fontsize=10)
+    ax.clabel(CS, CS.levels, inline=True, fmt=lonfmt, fontsize=16)
     
 
 
@@ -1083,7 +1083,8 @@ def closestMethodologyFig(bedmap,grid,physical,baths,closest_points,sal,temp,she
    
     newcmap = cmocean.tools.crop(cmocean.cm.topo, -2500, 0, 0)
     im = ax.pcolormesh(Xcrop,Ycrop,bedcrop,vmin=-2500,vmax=0,cmap=newcmap)
-    plt.colorbar(im,ax=ax,aspect=40,shrink=0.8,location = 'left',pad=0.02)
+    cbar = plt.colorbar(im,ax=ax,aspect=40,shrink=0.8,location = 'left',pad=0.02)
+    cbar.ax.tick_params(labelsize=14)
     ax.pcolormesh(Xcrop,Ycrop,icecrop,zorder=7,cmap="Greys_r",vmin=-0.5,vmax=1)
 
     shelfmask = np.empty_like(bedmap.icemask_grounded_and_shelves.values)
@@ -1098,10 +1099,10 @@ def closestMethodologyFig(bedmap,grid,physical,baths,closest_points,sal,temp,she
     ax.scatter(physical[l][0],physical[l][1],s=200,linewidth=3,c="white",marker="*",zorder=10)
     ax.annotate("GL",(physical[l][0],physical[l][1]+2000),fontsize=24,color="white",zorder=10)
     ax.scatter(x,y,s=200,c="white",marker="x",linewidth=3,zorder=10)
-    ax.annotate("WOA",(x,y+2000),fontsize=24,color="white",zorder=10)
+    ax.annotate("WOA",(x-45000,y-25000),fontsize=24,color="white",zorder=10)
 
     mapins = inset_axes(ax, width="30%", height="30%", loc='lower right',
-                   bbox_to_anchor=(0,0,1,1), bbox_transform=ax.transAxes)
+                   bbox_to_anchor=(0.075,0,1,1), bbox_transform=ax.transAxes)
     mapins.add_patch(Rectangle((centroid_i[1]-wym,centroid_i[0]-wxm),wym+wyp,wxm+wxp,facecolor='red',alpha=0.5))
 
 
@@ -1126,15 +1127,18 @@ def closestMethodologyFig(bedmap,grid,physical,baths,closest_points,sal,temp,she
     
     matplotlib.rcParams['axes.labelcolor'] = 'white'
     buffer = 0.125 # fractional axes coordinates
-
+    plt.xticks(fontsize=18)
+    plt.yticks(fontsize=18)
     sideax.xaxis.label.set_color('black')
     sideax.yaxis.label.set_color('black')
-    sideax.tick_params(axis='x', colors='black')
-    sideax.tick_params(axis='y', colors='black')
+    sideax.tick_params(axis='x', colors='black',labelsize=14)
+    sideax.tick_params(axis='y', colors='black',labelsize=14)
     sideax.set_yticks([0,-500,-1000,-1500])
-    sideax.set_xlabel("Temperature (C)",fontsize=12)
-    sideax.set_ylabel("Depth (m)",fontsize=12)
-    sideax.axhline(-abs(baths[l]),c="red")
+    sideax.set_xticks([-2,-1,0,1])
+    sideax.set_xlabel("Temperature (C)",fontsize=18)
+    sideax.set_ylabel("Depth (m)",fontsize=18)
+    sideax.axhline(-abs(baths[l]),c="red",lw=3)
+    sideax.axhspan(-abs(baths[l]), -abs(baths[l])+100, color='red', alpha=0.4, lw=0)
     pyc = pycnocline((tinterp,sinterp),0)
     plt.tight_layout()
 
