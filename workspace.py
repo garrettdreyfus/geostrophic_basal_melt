@@ -19,6 +19,7 @@ import cdw
 from tqdm import tqdm
 import xarray as xr
 import winds as wind
+from Lazeroms import LazeromsM
 
 # Create GLIB
 
@@ -70,12 +71,6 @@ if writeGLIB:
 
 with open("data/bedmachGLIB.pickle","rb") as f:
     GLIB = pickle.load(f)
-
-cmap = ListedColormap ( np.random.rand ( 256,3))
-plt.imshow(GLIB,cmap=cmap)
-plt.show()
-
-
 
 ##################################################
 
@@ -161,6 +156,7 @@ with open("data/physical_ice.pickle","rb") as f:
 #layertemp = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="newtemp")
 #hubsalts = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="glibheat")
 #gprimes = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="gprime")
+#dsalts = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="dsalt")
 #cdwdepths = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="cdwdepth",debug=True)
 #distances = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="distance")
 #isopycnaldepths = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="thermocline",shelfkeys=shelf_keys)
@@ -172,7 +168,6 @@ with open("data/physical_ice.pickle","rb") as f:
 #for l in range(40000,80000,100):
     #plt.annotate(l,(grid.T[0,l],grid.T[1,l]))
 #plt.show()
-#glibheats = cdw.closestMethodologyFig(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="glibheat",debug=False)
 #exit()
 ##with open("data/distances.pickle","wb") as f:
     #pickle.dump(distances,f)
@@ -236,9 +231,10 @@ with open("data/polynas.pickle","rb") as f:
 #with open("data/polynas.pickle","rb") as f:
     #polynas = pickle.load(f)
 
+#glibheats = cdw.closestMethodologyFig(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="glibheat",debug=False)
 
 #glibheats = np.asarray(glibheats)*np.asarray(isopycnaldepths)
-
+print("hello")
 projection = pyproj.Proj("epsg:3031")
 fs = []
 for x,y in physical:
@@ -267,7 +263,7 @@ winds_by_shelf = wind.AMPS_wind(polygons,"data/AMPS_winds.mat",icemask)
     #pickle.dump(rignot_shelf_massloss,f)
 #with open("data/new_massloss.pickle","rb") as f:
     #rignot_shelf_massloss = pickle.load(f)
-rignot_shelf_massloss,sigmas_by_shelf =  cdw.extract_adusumilli("data/Adusumilli.csv")
+rignot_shelf_massloss,shelf_areas,sigmas_by_shelf =  cdw.extract_adusumilli("data/Adusumilli.csv")
 #rignot_shelf_massloss =  bt.shelf_mass_loss("",polygons)
 
 #with open("data/onlypositivemelt.pickle","wb") as f:
@@ -321,7 +317,8 @@ sigmas = []
 #
 labels = []
 for k in slopes_by_shelf.keys():
-    if k in rignot_shelf_massloss and ~np.isnan(rignot_shelf_massloss[k]):
+    if (k in rignot_shelf_massloss and ~np.isnan(rignot_shelf_massloss[k]) and k!="George_VI")or k =="Amery" :
+        print(k)
         x,y = (polygons[k][0].centroid.x,polygons[k][0].centroid.y)
         slopes.append(slopes_by_shelf[k])
         volumes.append(volumes_by_shelf[k])
@@ -338,10 +335,14 @@ for k in slopes_by_shelf.keys():
         polynas.append(np.nanmean(polyna_by_shelf[k]))
         salts.append(np.nanmean(salts_by_shelf[k]))
         winds.append(np.nanmean(winds_by_shelf[k]))
-        sigmas.append(sigmas_by_shelf[k])
-        #bars.append(sigmas[k])
-        areas.append(shelf_areas[k])
-        mys.append(rignot_shelf_massloss[k])
+        if k == "Amery":
+            sigmas.append(0.7)
+            areas.append(0)
+            mys.append(0.8)
+        else:
+            sigmas.append(sigmas_by_shelf[k])
+            areas.append(shelf_areas[k])
+            mys.append(rignot_shelf_massloss[k])
 
 #plt.scatter(np.asarray(thermals)*np.asarray(cdws)*slopes,mys,c=gldepths)
 #plt.errorbar(np.asarray(thermals)*np.asarray(cdws)*slopes,mys,yerr=sigmas,ls='none')
@@ -410,42 +411,137 @@ if False:
 # ax3.set_xlabel("Avg depth of thermocline above HUB * delta t")
 #plt.plot(range(30),range(30))
 #plt.show()
+print("amde it here")
 areas = np.asarray(areas)
+slopes = np.asarray(slopes)
+glibshelf = np.asarray(glibshelf)
+cdws = np.asarray(cdws)
+#plt.hist(gprimes)
+#plt.show()
 melts = cdws*np.asarray(thermals)*np.asarray(fs)*(np.asarray(gprimes))*slopes
+print("cdws",np.nanmean(cdws),np.nanstd(cdws))
+print("thermals",np.nanmean(thermals),np.nanstd(thermals))
+print("fs",np.nanmean(fs),np.nanstd(fs))
+print("gprimes",np.nanmean(gprimes),np.nanstd(gprimes))
+print("slopes",np.nanmean(slopes),np.nanstd(slopes))
 melts=melts
-mys=mys
+mys=np.asarray(mys)
+print("now here")
 #melts = np.asarray(thermals)*slopes
-rho0 = 1025
-Cp = 3850
-spy = (3.154*10**7)
-melten = 3.34*10**5
-kgtom = 920
-C= 0.00002
+
 #plt.scatter(melts*(rho0*spy*Cp*C)/(melten*kgtom),mys)
 plt.rc('axes', titlesize=24)     # fontsize of the axes title
 xs = np.asarray(([melts])).reshape((-1, 1))
 model = LinearRegression().fit(xs, mys)
+print("regressed")
 r2 = model.score(xs,mys)
+print(model.coef_)
+rho0 = 1025
+rhoi = 910
+Cp = 4186
+If = 334000
+print(model.coef_)
+C = model.coef_
+print("C: ",C)
+#W0 = (rho0*Cp)/(rhoi*If*C)
+W0 =  100000#(rho0*Cp)/(rhoi*If*C)
+alpha =  C/((rho0*Cp)/(rhoi*If*W0))
+print("alpha: ", alpha)
 melts = model.predict(xs)
 ax = plt.gca()
-ax.scatter(melts,mys)
-ax.errorbar(melts,mys,yerr=sigmas,ls='none')
-ax.set_xlim(0,5)
-ax.set_ylim(0,5)
-plt.xticks(fontsize=12)
-plt.yticks(fontsize=12)
-ax.plot(range(30),range(30))
-ax.text(.05, .95, '$r^2=$'+str(round(r2,2)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
-ax.set_xlabel(r"$\dot{m}_{\mathrm{pred}} (m/yr)$",fontsize=18)
-ax.set_ylabel(r'$\dot{m}_{\mathrm{obs}} (m/yr)$',fontsize=18)
+mys = np.asarray(mys)
+sigmas = np.asarray(sigmas)
+thermals = np.asarray(thermals)
+icedens = 917
+gigatonconv = 10**(-12)
+scale = icedens*gigatonconv*10**6
+gldepths = np.asarray(gldepths)
+#print(np.nansum(melts*areas)*scale,np.nansum(mys*areas)*scale,np.nansum(sigmas*areas)*scale)
+#ax.scatter(melts[melts>4]*areas[melts>4]*scale,mys[melts>4]*areas[melts>4]*scale,c="red")
+#ax.scatter(melts[melts<4]*areas[melts<4]*scale,mys[melts<4]*areas[melts<4]*scale)
+#ax.scatter(slopes[melts>4]*areas[melts<4],mys[melts>4]*areas[melts<4],c="red")
 
-for k in range(len(labels)):
-     if not not(melts[k]<5 and mys[k]<5):
-        ax.annotate(labels[k],(melts[k],mys[k]))
+thresh=4
+coldxs = np.asarray(([slopes[melts<4]*areas[melts<4]])).reshape((-1, 1))
+coldmodel = LinearRegression().fit(coldxs, mys[melts<4]*areas[melts<4])
+
+coldmelts = coldmodel.predict(coldxs)
+
+ax.scatter(melts[melts>4]*areas[melts>4]*scale,mys[melts>4]*areas[melts>4]*scale,c="red")
+ax.scatter(coldmelts*scale,mys[melts<4]*areas[melts<4]*scale,c="blue")
+
+#ax.scatter(slopes[melts<4]*areas[melts<4],mys[melts<4]*areas[melts<4])
+#ax.scatter(slopes[melts<thresh]*thermals[melts<thresh],mys[melts<thresh],c=thermals[melts<thresh])
+fs = np.asarray(fs)
+gprimes = np.asarray(gprimes)
+#c=ax.scatter(slopes[melts<thresh],mys[melts<thresh])#,c=glibshelf[melts<thresh])
+#plt.colorbar(c)
+
+markers, caps, bars = ax.errorbar(melts[melts>4]*areas[melts>4]*scale,mys[melts>4]*areas[melts>4]*scale,yerr=sigmas[melts>thresh]*areas[melts>thresh]*scale,ls='none')
+[bar.set_alpha(0.25) for bar in bars]
+markers, caps, bars = ax.errorbar(coldmelts*scale,mys[melts<4]*areas[melts<4]*scale,c="blue",yerr=sigmas[melts<thresh]*areas[melts<thresh]*scale,ls='none')
+[bar.set_alpha(0.25) for bar in bars]
+
+finalxs = np.concatenate((melts[melts>4]*areas[melts>4]*scale,coldmelts*scale))
+finalys = np.concatenate((mys[melts>4]*areas[melts>4]*scale,mys[melts<4]*areas[melts<4]*scale))
+finalxs = finalxs.reshape((-1, 1))
+finalmodel = LinearRegression().fit(finalxs,finalys)
+
+finalr2 = finalmodel.score(finalxs,finalys)
+print("MASSLOSS SUMS")
+print(np.nansum(finalxs),np.nansum(finalys))
+print(len(gldepths))
+print(len(mys))
+print(len(mys))
+#ax.scatter(gldepths[melts<thresh],mys[melts<thresh])
+#ax.errorbar(slopes[melts<thresh]*areas[melts<thresh],mys[melts<thresh]*areas[melts<thresh],yerr=sigmas[melts<thresh]*areas[melts<thresh],ls='none')
+#ax.errorbar(slopes[melts<thresh],mys[melts<thresh],yerr=sigmas[melts<thresh],ls='none')
+#ax.errorbar(areas[melts<thresh],mys[melts<thresh],yerr=sigmas[melts<thresh],ls='none')
+#ax.set_xlim(0,5)
+#ax.set_ylim(0,5)
+plt.xticks(fontsize=14)
+plt.yticks(fontsize=14)
+#ax.plot(range(30),range(30))
+#ax.plot(np.asarray(range(29))*10**10,np.asarray(range(30))*10**10)
+ax.text(.05, .95, '$r^2=$'+str(round(finalr2,2)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
+#ax.set_xlabel(r"$\dot{m}_{\mathrm{pred}} (m/yr)$",fontsize=18)
+#ax.set_ylabel(r'$\dot{m}_{\mathrm{obs}} (m/yr)$',fontsize=18)
+ax.set_ylabel(r"Observed basal mass loss (Gt/yr)",fontsize=16)
+ax.set_xlabel(r'Predicted combined warm+cold shelf theory (Gt/yr)',fontsize=16)
+ax.plot((0,175),(0,175))
+labels = np.asarray(labels)
+coldlabels = labels[melts<thresh]
+warmlabels = labels[melts>thresh]
+for k in range(len(coldlabels)):
+    if coldmelts[k]*scale>39:
+        text= ax.annotate(coldlabels[k],(coldmelts[k]*scale,mys[melts<thresh][k]*areas[melts<thresh][k]*scale))
+        #text.set_alpha(.4)
+
+for k in range(len(warmlabels)):
+    if melts[melts>thresh][k]*areas[melts>thresh][k]*scale > 39:
+        text = ax.annotate(warmlabels[k],(melts[melts>thresh][k]*areas[melts>thresh][k]*scale,mys[melts>thresh][k]*areas[melts>thresh][k]*scale))
+        #text.set_alpha(.4)
+     #if melts[k]<thresh:
+        #ax.annotate(labels[k],(coldmelts[k]*scale,mys[k]*areas[k]*scale))
+     #else:
+        #ax.annotate(labels[k],(melts[k]*areas[k]*scale,mys[k]*areas[k]*scale))
+        #ax.annotate(labels[k],(gldepths[k],mys[k]))
 
 plt.show()
+plt.scatter(slopes[melts<4]*areas[melts<4],mys[melts<4]*areas[melts<4]*scale)
+markers, caps, bars = plt.errorbar(slopes[melts<thresh]*areas[melts<4],mys[melts<thresh]*areas[melts<4]*scale,yerr=sigmas[melts<thresh]*areas[melts<4]*scale,ls='none')
+[bar.set_alpha(0.5) for bar in bars]
+for k in range(len(coldlabels)):
+    if slopes[melts<thresh][k]*areas[melts<thresh][k]>77:
+        plt.annotate(coldlabels[k],(slopes[melts<thresh][k]*areas[melts<thresh][k],mys[melts<thresh][k]*areas[melts<thresh][k]*scale))
 
-if True:
+plt.xticks(fontsize=14)
+plt.yticks(fontsize=14)
+plt.ylabel(r"Observed basal mass loss (Gt/yr)",fontsize=16)
+plt.xlabel(r'Median ice shelf slope * area (m)',fontsize=16)
+plt.show()
+
+if False:
     oldxs = xs
     xs = model.predict(xs)
     tempterms = cdws*np.asarray(thermals)*np.asarray(fs)*np.asarray(gprimes)
@@ -492,23 +588,36 @@ winds = np.asarray(winds)
 volumes = np.asarray(volumes)
 thermals = np.asarray(thermals)
 hubdeltas = np.asarray(hubdeltas)
+thresh = 3
+
+lxs,Ms = LazeromsM()
+
+glmax = 400#np.nanmax(np.abs(gldepths))
+ms = []
+
+for i in gldepths:
+    print(i,glmax,np.abs(i/glmax))
+    ms.append(np.nanmean(Ms[lxs<(np.abs(i/glmax))]))
+
+plt.scatter(np.asarray(ms)[xs<thresh]*glibshelf[xs<thresh],np.asarray(mys)[xs<thresh],c=gldepths[xs<thresh])
+plt.colorbar()
+plt.show()
 
 # plt.scatter(polynas[xs<2.5]/areas[xs<2.5],mys[xs<2.5],c=polynas[xs<2.5])
 # plt.errorbar(xs[xs<2.5]/areas[xs<2.5],mys[xs<2.5],yerr=sigmas[xs<2.5],ls="none")
 # for k in range(len(labels[xs<2.5])):
 #     plt.annotate(labels[xs<2.5][k],(polynas[xs<2.5][k]/areas[xs<2.5][k],mys[xs<2.5][k]))
-thresh = 3
 freezingtemps = gsw.CT_freezing(34.7,np.abs(gldepths),0)
 distances = distances/np.nanmax(distances)
 #newxs = ((e^(-distances)))[xs<thresh]/distances[xs<thresh]
 ms=np.linspace(0,1,1000)
 ms = 1 / (2*np.sqrt(2)) * (3*(1 - ms)**(4/3) - 1) * np.sqrt(1 - (1 - ms)**(4/3))
 M = np.cumsum(ms)[::-1]
-dnormal = np.abs(distances)/(np.nanmax(np.abs(distances)))*0.6
+dnormal = n-p.abs(distances)/(np.nanmax(np.abs(distances)))*0.6
 newxs = []
 for i in dnormal:
     newxs.append(M[int(i*1000)+400-1]/i)
-newxs = np.asarray(newxs)
+newxs = np.asarray(gldepths)
 newxs=newxs[xs<thresh]
 #newxs = -((1-(np.exp(-distances/(np.nanmax(distances))))))[xs<thresh]/(-distances[xs<thresh]/(np.nanmax(distances[xs<thresh])))
 plt.scatter(newxs,mys[xs<thresh],c=xs[xs<thresh],cmap="jet")

@@ -97,7 +97,11 @@ def gprime(heat_function,hub,shelf_key=None,lat=None,lon=None):
     zpyci = np.argmin(np.abs(zi-zpyc))
     di = gsw.rho(si,ti,0)
     endpoint = min(zpyci*2,len(di)-1)
-    gprime = 9.8*(np.nanmean(di[zpyci:endpoint]) - np.nanmean(di[:zpyci]))/np.nanmean(di[:endpoint])
+
+    rho_1i = np.logical_and(zi<zi[zpyci],zi>zi[zpyci]-zpyci)
+    rho_2i = np.logical_and(zi<zi[zpyci]+zpyci,zi>zi[zpyci])
+    gprime_ext = 9.8*(np.mean(di[rho_1i])-np.mean(di[rho_2i]))/np.mean(di[np.logical_or(rho_1i,rho_2i)])
+    #gprime = 9.8*(np.nanmean(di[zpyci:endpoint]) - np.nanmean(di[:zpyci]))/np.nanmean(di[:endpoint])
 
     if shelf_key == "Holmes" and False:# and (-zpyc+hub) < 75:
         fig,(ax1,ax2) = plt.subplots(1,2)
@@ -111,7 +115,7 @@ def gprime(heat_function,hub,shelf_key=None,lat=None,lon=None):
         plt.show()
         
     if ~(np.isnan(di).all()):
-        return gprime
+        return gprime_ext
     else:
         return np.nan
 
@@ -175,6 +179,12 @@ def heat_content(heat_function,depth,plusminus):
         #return np.max(ynew)
     else:
         return np.nan
+
+
+
+def saltdiff(heat_function,depth,plusminus):
+    depth = np.abs(depth)
+    return abs(heat_function[1](0) - heat_function[1](depth))
 
 def heat_content_layer(heat_function,depth,plusminus,zgl):
     #heat = gsw.cp_t_exact(s,t,d)
@@ -362,10 +372,12 @@ def extract_adusumilli(fname):
     dfs = pd.read_csv(fname)
     rignot_shelf_my = {}
     sigma = {}
+    areas = {}
     for l in range(len(dfs["Ice Shelf"])):
         if  dfs["Ice Shelf"][l] and dfs["Basal melt rate, 1994–2018 (m/yr)"][l]:
             shelves = dfs["Ice Shelf"][l].split("\n")
             melts = dfs["Basal melt rate, 1994–2018 (m/yr)"][l].split("\n")
+            areasline =  dfs["Area (km 2)"][l].split("\n")
             for i in range(len(shelves)):
                 mystr = melts[i]
                 shelfname = shelves[i]
@@ -375,9 +387,10 @@ def extract_adusumilli(fname):
                 my = float(mystr.split("±")[0])
                 sig = float(mystr.split("±")[1])
                 rignot_shelf_my[shelfname] = my
+                areas[shelfname] = float(areasline[i])
                 sigma[shelfname] = sig
             
-    return rignot_shelf_my,sigma
+    return rignot_shelf_my,areas,sigma
 
 
 def polyna_bathtub(bed,grid,GLIBregions):
@@ -656,6 +669,8 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shel
                 heats[l]=np.nan#
             elif quant=="glibheat" and np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
                 heats[l]=heat_content((tinterp,sinterp),baths[l],100)
+            elif quant=="dsalt" and np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
+                heats[l]=saltdiff((tinterp,sinterp),baths[l],100)
             elif quant=="thermdepth" and np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
                 heats[l]=therm_depth((tinterp,sinterp),baths[l],0.5)
             elif quant=="cdwdepth" and np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
@@ -1033,6 +1048,8 @@ def closestMethodologyFig(bedmap,grid,physical,baths,closest_points,sal,temp,she
     closest=np.unravel_index(rdist.argmin(), rdist.shape)
     x = stx[closest[0],closest[1]]
     y = sty[closest[0],closest[1]]
+    xC,yC = centroid
+    print(x,y,xC,yC)
     X,Y=np.meshgrid(bedmap.coords["x"].values,bedmap.coords["y"].values)
     wym=100
     wyp=2200
@@ -1099,6 +1116,7 @@ def closestMethodologyFig(bedmap,grid,physical,baths,closest_points,sal,temp,she
     ax.scatter(physical[l][0],physical[l][1],s=200,linewidth=3,c="white",marker="*",zorder=10)
     ax.annotate("GL",(physical[l][0],physical[l][1]+2000),fontsize=24,color="white",zorder=10)
     ax.scatter(x,y,s=200,c="white",marker="x",linewidth=3,zorder=10)
+    ax.scatter(xC,yC,s=200,c="white",marker="x",linewidth=3,zorder=10)
     ax.annotate("WOA",(x-45000,y-25000),fontsize=24,color="white",zorder=10)
 
     mapins = inset_axes(ax, width="30%", height="30%", loc='lower right',
@@ -1137,6 +1155,10 @@ def closestMethodologyFig(bedmap,grid,physical,baths,closest_points,sal,temp,she
     sideax.set_xticks([-2,-1,0,1])
     sideax.set_xlabel("Temperature (C)",fontsize=18)
     sideax.set_ylabel("Depth (m)",fontsize=18)
+
+    deltaH = pycnocline((tinterp,sinterp),-abs(baths[l]))
+    sideax.axhline(-abs(baths[l])+abs(deltaH),c="blue",lw=3)
+
     sideax.axhline(-abs(baths[l]),c="red",lw=3)
     sideax.axhspan(-abs(baths[l]), -abs(baths[l])+100, color='red', alpha=0.4, lw=0)
     pyc = pycnocline((tinterp,sinterp),0)
