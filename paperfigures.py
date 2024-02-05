@@ -2,20 +2,15 @@ import xarray as xr
 import pyproj
 import h5py
 import numpy as np
-import rockhound as rh
-from scipy.interpolate import griddata
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from tqdm import tqdm
 import pickle
-from matplotlib.patches import Polygon
 import rioxarray as riox
 import cmocean
-from matplotlib.collections import PatchCollection
 from matplotlib.patches import Rectangle
 import matplotlib as mpl
 import rasterio
-import shapely
 from scipy.ndimage import label
 
 def grab_bottom(t,max_depth=500):
@@ -199,14 +194,7 @@ def overview_figure(downscale=2):
         gons = []
         parts = polygons[k][1]
         polygon = polygons[k][0]
-        #if len(parts)>1:
-            ##parts.append(-1)
-            #for l in range(0,len(parts)-1):
-                #poly_path=Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T)
-                #gons.append(poly_path)
-        #else:
-            #gons = [Polygon(np.asarray(polygon.exterior.coords.xy).T)]
-        #p = PatchCollection(gons)
+
         exterior = np.asarray(polygon.exterior.coords.xy)
         min_i = np.argmin(np.sum(exterior**2,axis=0).shape)
         x = exterior[0][min_i]
@@ -281,4 +269,153 @@ def hub_schematic_figure():
 
     plt.show()
 #hub_schematic_figure()
-overview_figure(downscale=2)
+#overview_figure(downscale=2)
+
+def closestMethodologyFig(bedmap,grid,physical,baths,closest_points,sal,temp,shelves,debug=False,quant="glibheat",shelfkeys=None,point_i=55900):
+    plt.figure(figsize=(18,5))
+    gs = gridspec.GridSpec(1, 2, width_ratios=[5, 1])
+    ax,sideax = plt.subplot(gs[0]),plt.subplot(gs[1])
+    print("temp from closest point")
+    heats=[np.nan]*len(baths)
+    stx = sal.coords["x"].values
+    sty = sal.coords["y"].values
+    projection = pyproj.Proj("epsg:3031")
+    salvals,tempvals = sal.s_an.values[0,:,:,:],temp.t_an.values[0,:,:,:]
+    d  = sal.depth.values
+    lines = []
+    bedvalues = bedmap.bed.values
+    mask = np.zeros(salvals.shape[1:])
+
+    icemask = np.empty_like(bedmap.icemask_grounded_and_shelves.values)
+    icemask[:] = bedmap.icemask_grounded_and_shelves.values
+    icemask[icemask==1]=np.nan
+
+    mask[:]=np.inf
+    for l in range(salvals.shape[1]):
+        for k in range(salvals.shape[2]):
+            if np.sum(~np.isnan(salvals[:,l,k]))>0 and np.max(d[~np.isnan(salvals[:,l,k])])>1500:
+                mask[l,k] = 1
+    l=point_i
+    centroid = [bedmap.coords["x"].values[closest_points[l][1]],bedmap.coords["y"].values[closest_points[l][0]]]
+    centroid_i =grid[l] 
+    rdist = np.sqrt((sal.coords["x"]- centroid[0])**2 + (sal.coords["y"] - centroid[1])**2)
+    rdist = rdist*mask
+    closest=np.unravel_index(rdist.argmin(), rdist.shape)
+    x = stx[closest[0],closest[1]]
+    y = sty[closest[0],closest[1]]
+    xC,yC = centroid
+    print(x,y,xC,yC)
+    X,Y=np.meshgrid(bedmap.coords["x"].values,bedmap.coords["y"].values)
+    wym=100
+    wyp=2200
+    wxm=200
+    wxp=200
+    ax.set_xticks([],[])
+    ax.set_yticks([],[])
+
+    Xcrop = X[centroid_i[0]-wxm:centroid_i[0]+wxp,centroid_i[1]-wym:centroid_i[1]+wyp]
+    print(Xcrop.shape)
+    Ycrop = Y[centroid_i[0]-wxm:centroid_i[0]+wxp,centroid_i[1]-wym:centroid_i[1]+wyp]
+
+    source_crs = 'epsg:3031' # Coordinate system of the file
+    target_crs = 'epsg:4326' # Global lat-lon coordinate system
+    converter = pyproj.Transformer.from_crs(source_crs, target_crs)
+    lats,lons = converter.transform(Xcrop,Ycrop)
+
+    def latfmt(x):
+        s = f"{x:.1f}"
+        if s.endswith("0"):
+            s = f"{x:.0f}"
+        if x>0:
+            return f"{s} $^\circ$N"
+        if x<0:
+            return f"{s} $^\circ$S"
+    def lonfmt(x):
+        s = f"{x:.1f}"
+        if s.endswith("0"):
+            s = f"{x:.0f}"
+        if x>0:
+            return f"{s} $^\circ$E"
+        if x<0:
+            return f"{s} $^\circ$W"
+
+
+
+    CS = ax.contour(Xcrop,Ycrop,lats,5,colors="white",zorder=10)
+    ax.clabel(CS, CS.levels, inline=True, fmt=latfmt, fontsize=16)
+    CS = ax.contour(Xcrop,Ycrop,lons,5,colors="white",zorder=10)
+    ax.clabel(CS, CS.levels, inline=True, fmt=lonfmt, fontsize=16)
+    
+
+
+    bedcrop = bedvalues[centroid_i[0]-wxm:centroid_i[0]+wxp,centroid_i[1]-wym:centroid_i[1]+wyp]
+    icecrop = icemask[centroid_i[0]-wxm:centroid_i[0]+wxp,centroid_i[1]-wym:centroid_i[1]+wyp]
+    
+   
+    newcmap = cmocean.tools.crop(cmocean.cm.topo, -2500, 0, 0)
+    im = ax.pcolormesh(Xcrop,Ycrop,bedcrop,vmin=-2500,vmax=0,cmap=newcmap)
+    cbar = plt.colorbar(im,ax=ax,aspect=40,shrink=0.8,location = 'left',pad=0.02)
+    cbar.ax.tick_params(labelsize=14)
+    ax.pcolormesh(Xcrop,Ycrop,icecrop,zorder=7,cmap="Greys_r",vmin=-0.5,vmax=1)
+
+    shelfmask = np.empty_like(bedmap.icemask_grounded_and_shelves.values)
+    shelfmask[:] = bedmap.icemask_grounded_and_shelves.values
+    shelfmask[shelfmask==0]=np.nan
+    shelfcrop = shelfmask[centroid_i[0]-wxm:centroid_i[0]+wxp,centroid_i[1]-wym:centroid_i[1]+wyp]
+
+    ax.pcolormesh(Xcrop,Ycrop,shelfcrop,zorder=5,cmap="Greys",alpha=0.5)
+
+    ax.contour(Xcrop,Ycrop,bedcrop,[-abs(baths[l])+5],colors=["red"],linestyles=["solid"],zorder=1,linewidths=3)
+
+    ax.scatter(physical[l][0],physical[l][1],s=200,linewidth=3,c="white",marker="*",zorder=10)
+    ax.annotate("GL",(physical[l][0],physical[l][1]+2000),fontsize=24,color="white",zorder=10)
+    ax.scatter(x,y,s=200,c="white",marker="x",linewidth=3,zorder=10)
+    ax.scatter(xC,yC,s=200,c="white",marker="x",linewidth=3,zorder=10)
+    ax.annotate("WOA",(x-45000,y-25000),fontsize=24,color="white",zorder=10)
+
+    mapins = inset_axes(ax, width="30%", height="30%", loc='lower right',
+                   bbox_to_anchor=(0.075,0,1,1), bbox_transform=ax.transAxes)
+    mapins.add_patch(Rectangle((centroid_i[1]-wym,centroid_i[0]-wxm),wym+wyp,wxm+wxp,facecolor='red',alpha=0.5))
+
+
+    coarsefull = bedmap.icemask_grounded_and_shelves.values
+    coarsefull[coarsefull==1]=np.nan
+    mapins.imshow(coarsefull)
+    mapins.set_xticks([],[])
+    mapins.set_yticks([],[])
+
+
+
+    t = tempvals[:,closest[0],closest[1]]
+    s = salvals[:,closest[0],closest[1]]
+    lon,lat = projection(x,y,inverse=True)
+    s = gsw.SA_from_SP(s,d,lon,lat)
+    #FOR MIMOC MAKE PT
+    #t = gsw.CT_from_pt(s,t)
+    t = gsw.CT_from_t(s,t,d)
+
+    tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
+    sideax.plot(t,-d)
+    
+    matplotlib.rcParams['axes.labelcolor'] = 'white'
+    buffer = 0.125 # fractional axes coordinates
+    plt.xticks(fontsize=18)
+    plt.yticks(fontsize=18)
+    sideax.xaxis.label.set_color('black')
+    sideax.yaxis.label.set_color('black')
+    sideax.tick_params(axis='x', colors='black',labelsize=14)
+    sideax.tick_params(axis='y', colors='black',labelsize=14)
+    sideax.set_yticks([0,-500,-1000,-1500])
+    sideax.set_xticks([-2,-1,0,1])
+    sideax.set_xlabel("Temperature (C)",fontsize=18)
+    sideax.set_ylabel("Depth (m)",fontsize=18)
+
+    deltaH = pycnocline((tinterp,sinterp),-abs(baths[l]))
+    sideax.axhline(-abs(baths[l])+abs(deltaH),c="blue",lw=3)
+
+    sideax.axhline(-abs(baths[l]),c="red",lw=3)
+    sideax.axhspan(-abs(baths[l]), -abs(baths[l])+100, color='red', alpha=0.4, lw=0)
+    pyc = pycnocline((tinterp,sinterp),0)
+    plt.tight_layout()
+
+    plt.show()

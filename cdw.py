@@ -1,36 +1,27 @@
-import shapefile
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 import shapely
-import rockhound as rh
 import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib import gridspec
 import cmocean
-from xgrads import open_CtlDataset
 import numpy as np
-import itertools, pickle
 from tqdm import tqdm
-from shapely.geometry import Polygon, Point
+from shapely.geometry import Polygon
 from matplotlib.patches import Rectangle
-import time,gsw,xarray, pyproj
-from bathtub import closest_shelf,convert_bedmachine
+import gsw,xarray, pyproj
+from bathtub import closest_shelf
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from scipy import interpolate
 import pandas as pd
 from copy import copy
-import xarray as xr
 from scipy.ndimage import binary_dilation
-import skfmm
 from matplotlib import collections  as mc
 from functools import partial
-from sklearn.linear_model import LinearRegression
 from tqdm.contrib.concurrent import process_map
-from scipy.ndimage import binary_dilation as bd
-from scipy.ndimage import label, gaussian_filter 
+from scipy.ndimage import binary_dilation as bd, label, gaussian_filter 
 import rioxarray as riox
 import rasterio
-import scipy
 
 def moving_average(x, w):
     return np.convolve(x, np.ones(w), 'valid') / w
@@ -96,12 +87,10 @@ def gprime(heat_function,hub,shelf_key=None,lat=None,lon=None):
     zpyc = np.mean(zi[1:][dizi>thresh])
     zpyci = np.argmin(np.abs(zi-zpyc))
     di = gsw.rho(si,ti,0)
-    endpoint = min(zpyci*2,len(di)-1)
 
     rho_1i = np.logical_and(zi<zi[zpyci],zi>zi[zpyci]-zpyci)
     rho_2i = np.logical_and(zi<zi[zpyci]+zpyci,zi>zi[zpyci])
     gprime_ext = 9.8*(np.mean(di[rho_1i])-np.mean(di[rho_2i]))/np.mean(di[np.logical_or(rho_1i,rho_2i)])
-    #gprime = 9.8*(np.nanmean(di[zpyci:endpoint]) - np.nanmean(di[:zpyci]))/np.nanmean(di[:endpoint])
 
     if shelf_key == "Holmes" and False:# and (-zpyc+hub) < 75:
         fig,(ax1,ax2) = plt.subplots(1,2)
@@ -160,7 +149,6 @@ def pycnocline(heat_function,hub,shelf_key=None,lat=None,lon=None):
         plt.title(str(round(lat,1))+" , "+str(round(lon,1)))
         plt.show()
     H2 = -(zpyc)+(hub)
-    H1 = abs(hub) - abs(H2)
         
     if ~(np.isnan(di).all()):
         return H2#*gprime
@@ -394,7 +382,6 @@ def closest_point_pfun(grid,bedmach,baths,l):
 
     if np.sum(np.logical_and(route,bordermask))>0:
         intersection = [[],[]]
-        count = 0 
         while len(intersection[0])==0:
             searchcopy[search==1]=1
             plt.xlim(3000,7000)
@@ -404,15 +391,8 @@ def closest_point_pfun(grid,bedmach,baths,l):
             plt.gca().set_xticks([], minor=True)
             plt.gca().set_yticks([], minor=True)
             plt.gcf().set_size_inches(7, 7)
-            #plt.imshow(searchcopy,cmap="jet",interpolation="none")
-            #plt.scatter(grid[l][1],grid[l][0],c="red")
-            #plt.savefig("/home/garrett/Projects/HUB/paperfigures/search"+str(count)+".png",dpi=500)
-            #plt.close()
 
-            count+=1
             search = bd(search,mask=route,iterations=400)
-
-            #plt.imshow(searchcopy[500:7000,3000:7000])
 
             searchsumnew = np.sum(search)
             if searchsum !=searchsumnew:
@@ -422,17 +402,6 @@ def closest_point_pfun(grid,bedmach,baths,l):
             intersection = np.where(np.logical_and(search,bordermask))
 
         searchcopy[search==1]=1
-        #plt.xlim(3000,7000)
-        #plt.ylim(7000,3000)
-        #plt.xticks([], [])
-        ##plt.yticks([], [])
-        #plt.gca().set_xticks([], minor=True)
-        #plt.gca().set_yticks([], minor=True)
-        #plt.gcf().set_size_inches(7, 7)
-        #plt.imshow(searchcopy,cmap="jet",interpolation="none")
-        #plt.scatter(grid[l][1],grid[l][0],c="red")
-        #plt.savefig("/home/garrett/Projects/HUB/paperfigures/search"+str(count)+".png")
-        ##plt.close()
         return (intersection[0][0],intersection[1][0])
     else:
         return (np.nan,np.nan)
@@ -512,10 +481,8 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shel
     projection = pyproj.Proj("epsg:3031")
     salvals,tempvals = sal.s_an.values[0,:,:,:],temp.t_an.values[0,:,:,:]
     d  = sal.depth.values
-    count = 0
     lines = []
     bedvalues = bedmap.bed.values
-    prof_depths = np.asarray(range(100,1500,20))
     mask = np.zeros(salvals.shape[1:])
 
     mask[:]=np.inf
@@ -525,7 +492,6 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shel
                 mask[l,k] = 1
     for l in tqdm(range(len(closest_points))[::-1]):
         if ~np.isnan(closest_points[l]).any():
-            count+=0
             centroid = [bedmap.coords["x"].values[closest_points[l][1]],bedmap.coords["y"].values[closest_points[l][0]]]
             rdist = np.sqrt((sal.coords["x"]- centroid[0])**2 + (sal.coords["y"] - centroid[1])**2)
             rdist = rdist*mask
@@ -614,13 +580,11 @@ def GLIB_by_shelf(GLIB,bedmach,polygons):
     slopes=[np.nan]*len(depths)
     projection = pyproj.Proj("epsg:3031")
 
-    count = 0
     bedvalues = bedmap.bed.values
     icefrontT = np.asarray(icefront).T
     if mode=="closest":
         for l in tqdm(range(len(closest_points))[::-1]):
             if ~np.isnan(closest_points[l]).any():
-                count+=0
                 centroid = [bedmap.coords["x"].values[closest_points[l][1]],bedmap.coords["y"].values[closest_points[l][0]]]
                 rdist = np.sqrt((icefrontT[0]- centroid[0])**2 + (icefrontT[1] - centroid[1])**2)
                 dist= np.nanmin(rdist)
@@ -685,155 +649,3 @@ def slope_by_shelf(bedmach,polygons):
     return glib_by_shelf
 
 
-def closestMethodologyFig(bedmap,grid,physical,baths,closest_points,sal,temp,shelves,debug=False,quant="glibheat",shelfkeys=None,point_i=55900):
-    plt.figure(figsize=(18,5))
-    gs = gridspec.GridSpec(1, 2, width_ratios=[5, 1])
-    ax,sideax = plt.subplot(gs[0]),plt.subplot(gs[1])
-    print("temp from closest point")
-    heats=[np.nan]*len(baths)
-    stx = sal.coords["x"].values
-    sty = sal.coords["y"].values
-    projection = pyproj.Proj("epsg:3031")
-    salvals,tempvals = sal.s_an.values[0,:,:,:],temp.t_an.values[0,:,:,:]
-    d  = sal.depth.values
-    count = 0
-    lines = []
-    bedvalues = bedmap.bed.values
-    prof_depths = np.asarray(range(100,1500,20))
-    mask = np.zeros(salvals.shape[1:])
-
-    icemask = np.empty_like(bedmap.icemask_grounded_and_shelves.values)
-    icemask[:] = bedmap.icemask_grounded_and_shelves.values
-    icemask[icemask==1]=np.nan
-
-    mask[:]=np.inf
-    for l in range(salvals.shape[1]):
-        for k in range(salvals.shape[2]):
-            if np.sum(~np.isnan(salvals[:,l,k]))>0 and np.max(d[~np.isnan(salvals[:,l,k])])>1500:
-                mask[l,k] = 1
-    l=point_i
-    count+=0
-    centroid = [bedmap.coords["x"].values[closest_points[l][1]],bedmap.coords["y"].values[closest_points[l][0]]]
-    centroid_i =grid[l] 
-    rdist = np.sqrt((sal.coords["x"]- centroid[0])**2 + (sal.coords["y"] - centroid[1])**2)
-    rdist = rdist*mask
-    closest=np.unravel_index(rdist.argmin(), rdist.shape)
-    x = stx[closest[0],closest[1]]
-    y = sty[closest[0],closest[1]]
-    xC,yC = centroid
-    print(x,y,xC,yC)
-    X,Y=np.meshgrid(bedmap.coords["x"].values,bedmap.coords["y"].values)
-    wym=100
-    wyp=2200
-    wxm=200
-    wxp=200
-    ax.set_xticks([],[])
-    ax.set_yticks([],[])
-    loc_box = [1.1, 0, 0.15, 1]
-
-    Xcrop = X[centroid_i[0]-wxm:centroid_i[0]+wxp,centroid_i[1]-wym:centroid_i[1]+wyp]
-    print(Xcrop.shape)
-    Ycrop = Y[centroid_i[0]-wxm:centroid_i[0]+wxp,centroid_i[1]-wym:centroid_i[1]+wyp]
-
-    source_crs = 'epsg:3031' # Coordinate system of the file
-    target_crs = 'epsg:4326' # Global lat-lon coordinate system
-    converter = pyproj.Transformer.from_crs(source_crs, target_crs)
-    lats,lons = converter.transform(Xcrop,Ycrop)
-
-    def latfmt(x):
-        s = f"{x:.1f}"
-        if s.endswith("0"):
-            s = f"{x:.0f}"
-        if x>0:
-            return f"{s} $^\circ$N"
-        if x<0:
-            return f"{s} $^\circ$S"
-    def lonfmt(x):
-        s = f"{x:.1f}"
-        if s.endswith("0"):
-            s = f"{x:.0f}"
-        if x>0:
-            return f"{s} $^\circ$E"
-        if x<0:
-            return f"{s} $^\circ$W"
-
-
-
-    CS = ax.contour(Xcrop,Ycrop,lats,5,colors="white",zorder=10)
-    ax.clabel(CS, CS.levels, inline=True, fmt=latfmt, fontsize=16)
-    CS = ax.contour(Xcrop,Ycrop,lons,5,colors="white",zorder=10)
-    ax.clabel(CS, CS.levels, inline=True, fmt=lonfmt, fontsize=16)
-    
-
-
-    bedcrop = bedvalues[centroid_i[0]-wxm:centroid_i[0]+wxp,centroid_i[1]-wym:centroid_i[1]+wyp]
-    icecrop = icemask[centroid_i[0]-wxm:centroid_i[0]+wxp,centroid_i[1]-wym:centroid_i[1]+wyp]
-    
-   
-    newcmap = cmocean.tools.crop(cmocean.cm.topo, -2500, 0, 0)
-    im = ax.pcolormesh(Xcrop,Ycrop,bedcrop,vmin=-2500,vmax=0,cmap=newcmap)
-    cbar = plt.colorbar(im,ax=ax,aspect=40,shrink=0.8,location = 'left',pad=0.02)
-    cbar.ax.tick_params(labelsize=14)
-    ax.pcolormesh(Xcrop,Ycrop,icecrop,zorder=7,cmap="Greys_r",vmin=-0.5,vmax=1)
-
-    shelfmask = np.empty_like(bedmap.icemask_grounded_and_shelves.values)
-    shelfmask[:] = bedmap.icemask_grounded_and_shelves.values
-    shelfmask[shelfmask==0]=np.nan
-    shelfcrop = shelfmask[centroid_i[0]-wxm:centroid_i[0]+wxp,centroid_i[1]-wym:centroid_i[1]+wyp]
-
-    ax.pcolormesh(Xcrop,Ycrop,shelfcrop,zorder=5,cmap="Greys",alpha=0.5)
-
-    ax.contour(Xcrop,Ycrop,bedcrop,[-abs(baths[l])+5],colors=["red"],linestyles=["solid"],zorder=1,linewidths=3)
-
-    ax.scatter(physical[l][0],physical[l][1],s=200,linewidth=3,c="white",marker="*",zorder=10)
-    ax.annotate("GL",(physical[l][0],physical[l][1]+2000),fontsize=24,color="white",zorder=10)
-    ax.scatter(x,y,s=200,c="white",marker="x",linewidth=3,zorder=10)
-    ax.scatter(xC,yC,s=200,c="white",marker="x",linewidth=3,zorder=10)
-    ax.annotate("WOA",(x-45000,y-25000),fontsize=24,color="white",zorder=10)
-
-    mapins = inset_axes(ax, width="30%", height="30%", loc='lower right',
-                   bbox_to_anchor=(0.075,0,1,1), bbox_transform=ax.transAxes)
-    mapins.add_patch(Rectangle((centroid_i[1]-wym,centroid_i[0]-wxm),wym+wyp,wxm+wxp,facecolor='red',alpha=0.5))
-
-
-    coarsefull = bedmap.icemask_grounded_and_shelves.values
-    coarsefull[coarsefull==1]=np.nan
-    mapins.imshow(coarsefull)
-    mapins.set_xticks([],[])
-    mapins.set_yticks([],[])
-
-
-
-    t = tempvals[:,closest[0],closest[1]]
-    s = salvals[:,closest[0],closest[1]]
-    lon,lat = projection(x,y,inverse=True)
-    s = gsw.SA_from_SP(s,d,lon,lat)
-    #FOR MIMOC MAKE PT
-    #t = gsw.CT_from_pt(s,t)
-    t = gsw.CT_from_t(s,t,d)
-
-    tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
-    sideax.plot(t,-d)
-    
-    matplotlib.rcParams['axes.labelcolor'] = 'white'
-    buffer = 0.125 # fractional axes coordinates
-    plt.xticks(fontsize=18)
-    plt.yticks(fontsize=18)
-    sideax.xaxis.label.set_color('black')
-    sideax.yaxis.label.set_color('black')
-    sideax.tick_params(axis='x', colors='black',labelsize=14)
-    sideax.tick_params(axis='y', colors='black',labelsize=14)
-    sideax.set_yticks([0,-500,-1000,-1500])
-    sideax.set_xticks([-2,-1,0,1])
-    sideax.set_xlabel("Temperature (C)",fontsize=18)
-    sideax.set_ylabel("Depth (m)",fontsize=18)
-
-    deltaH = pycnocline((tinterp,sinterp),-abs(baths[l]))
-    sideax.axhline(-abs(baths[l])+abs(deltaH),c="blue",lw=3)
-
-    sideax.axhline(-abs(baths[l]),c="red",lw=3)
-    sideax.axhspan(-abs(baths[l]), -abs(baths[l])+100, color='red', alpha=0.4, lw=0)
-    pyc = pycnocline((tinterp,sinterp),0)
-    plt.tight_layout()
-
-    plt.show()

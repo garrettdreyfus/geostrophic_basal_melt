@@ -1,19 +1,12 @@
 import shapefile
 import sys
-import rockhound as rh
-import matplotlib.pyplot as plt
-import cmocean
 import copy
 import numpy as np
-import itertools
 import pickle
 import pyproj 
 from tqdm import tqdm
 from shapely.geometry import Polygon, Point
-import matplotlib
 import shapely
-import time
-from scipy.ndimage import label 
 from scipy.ndimage import binary_dilation as bd
 import xarray as xr
 import rioxarray as riox
@@ -35,7 +28,6 @@ def shelf_areas():
         l = s[i]
         name = records[i].record[0]
         kind = records[i].record[3]
-        output = []
         if l.shapeTypeName == 'POLYGON' and kind== "FL":
             xs, ys = zip(*l.points)
             area = PolyArea(xs,ys)
@@ -56,7 +48,6 @@ def save_polygons():
         l = s[i]
         name = records[i].record[0]
         kind = records[i].record[3]
-        output = []
         if l.shapeTypeName == 'POLYGON' and kind== "FL":
             xs, ys = zip(*l.points)
             polygons[name] = [Polygon(l.points),l.parts]
@@ -120,7 +111,6 @@ def shelf_areas():
         l = s[i]
         name = records[i].record[0]
         kind = records[i].record[3]
-        output = []
         if l.shapeTypeName == 'POLYGON' and kind== "FL":
             xs, ys = zip(*l.points)
             polygons[name] = PolyArea(xs,ys)
@@ -140,14 +130,8 @@ def closest_shelf(coord,polygons):
 
 
 def get_line_points(shelf,polygons,debug=False,mode="grounding"):
-    margin_coords = []
-    mx = []
-    my = []
     icemask = np.asarray(shelf.icemask_grounded_and_shelves.values)
     beddepth = np.asarray(shelf.bed.values)
-    shelf_names = polygons.keys()
-    lines = []
-    count=0
     physical_cords = []
     grid_indexes = []
     depths=[]

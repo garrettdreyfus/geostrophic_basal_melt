@@ -1,16 +1,7 @@
 import xarray
-import xarray as xr
 import pyproj
 import numpy as np
-import rockhound as rh
-from scipy.interpolate import griddata
 import matplotlib.pyplot as plt
-from tqdm import tqdm
-import pickle
-import rioxarray as riox
-import rasterio
-from matplotlib.collections import PatchCollection
-import shapely
 
 def create_WOA(bed,debug = False):
    bedmap = bed
@@ -23,7 +14,6 @@ def create_WOA(bed,debug = False):
    temp = xarray.open_dataset(tempfname,decode_times=False)
    sal = sal.where(sal.lat<-60,drop=True)
    temp= temp.where(sal.lat<-60,drop=True)
-   d = sal.depth.values
    lons=sal.lon.values
    lats=sal.lat.values
    projection = pyproj.Proj("epsg:3031")
@@ -33,7 +23,6 @@ def create_WOA(bed,debug = False):
    sal.coords["y"]= (("lat","lon"),y)
    temp.coords["x"]= (("lat","lon"),x)
    temp.coords["y"]= (("lat","lon"),y)
-   xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
    sal["bed"] = bedmap.bed.interp(x=sal.x,y=sal.y)
    if debug:
       bedvalues = sal.bed.values
@@ -63,7 +52,6 @@ def create_Pauthenet(bed,debug = True):
    temp = dataset
    sal = sal.where(sal.lat<-60,drop=True)
    temp= temp.where(temp.lat<-60,drop=True)
-   d = sal.depth.values
    lons=sal.lon.values
    lats=sal.lat.values
    projection = pyproj.Proj("epsg:3031")
@@ -73,7 +61,6 @@ def create_Pauthenet(bed,debug = True):
    sal.coords["y"]= (("lat","lon"),y)
    temp.coords["x"]= (("lat","lon"),x)
    temp.coords["y"]= (("lat","lon"),y)
-   xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
    sal["bed"] = bedmap.bed.interp(x=sal.x,y=sal.y)
    if debug:
       bedvalues = sal.bed.values
@@ -112,7 +99,6 @@ def create_MIMOC(bed,debug = False):
    temp = dataset
    sal = sal.where(sal.lat<-60,drop=True)
    temp= temp.where(temp.lat<-60,drop=True)
-   d = sal.depth.values
    lons=sal.lon.values
    lats=sal.lat.values
    projection = pyproj.Proj("epsg:3031")
@@ -122,7 +108,6 @@ def create_MIMOC(bed,debug = False):
    sal.coords["y"]= (("lat","lon"),y)
    temp.coords["x"]= (("lat","lon"),x)
    temp.coords["y"]= (("lat","lon"),y)
-   xvals,yvals = np.meshgrid(bedmap.x,bedmap.y)
    sal["bed"] = bedmap.bed.interp(x=sal.x,y=sal.y)
    if debug:
       bedvalues = sal.bed.values
