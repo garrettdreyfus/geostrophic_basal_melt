@@ -184,15 +184,6 @@ def get_line_points(shelf,polygons,debug=False,mode="grounding"):
         plt.show()
     return physical_cords, grid_indexes, depths,shelves,shelf_keys
 
-
-def trimDataset(bm,xbounds,ybounds):
-    shelf=bm
-    shelf = shelf.where(shelf.x<xbounds[1],drop=True)
-    shelf = shelf.where(shelf.y<ybounds[1],drop=True)
-    shelf = shelf.where(shelf.x>xbounds[0],drop=True)
-    shelf = shelf.where(shelf.y>ybounds[0],drop=True)
-    return shelf
-
 def convert_bedmachine(fname,coarsenfact=1):
     bedmach = xr.open_dataset(fname)
     plt.imshow(bedmach.bed.values,vmin=-600,vmax=-200)

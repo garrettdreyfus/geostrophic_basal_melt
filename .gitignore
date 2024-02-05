@@ -1,4 +1,5 @@
 /pics/*.png
 /data/
+paperfigures/
 __pycache__/
 *.png

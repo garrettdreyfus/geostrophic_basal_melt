@@ -186,23 +186,6 @@ def saltdiff(heat_function,depth,plusminus):
     depth = np.abs(depth)
     return abs(heat_function[1](0) - heat_function[1](depth))
 
-def heat_content_layer(heat_function,depth,plusminus,zgl):
-    #heat = gsw.cp_t_exact(s,t,d)
-    depth = np.abs(depth)
-    #xnew= np.arange(50,min(depth+0,5000))
-    #xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,5000))
-    xnew= np.arange(max(0,depth-500),depth)
-    #print(xnew,depth,max(d))
-    ynew = heat_function[0](xnew)
-    cdwdepth = xnew[np.nanargmax(ynew)]
-    #xnew,ynew = xnew[ynew>0],ynew[ynew>0]
-    ynew = ynew - gsw.CT_freezing(heat_function[1](xnew),zgl,0)
-    #return np.nansum(ynew>1.2)/np.sum(~np.isnan(ynew))
-    if len(ynew)>0:
-        return -cdwdepth+depth#np.trapz(ynew,xnew)/len(xnew)
-    else:
-        return np.nan
-
 def thermoclineg_depth(heat_function,depth,isopyc=0):
     depth = np.abs(depth)
     zi = np.arange(0,1500)
@@ -269,20 +252,6 @@ def therm_depth(heat_function,depth,therm=0):
     else:
         return np.nan
 
-def interface_temp(heat_function,depth,therm=0):
-    depth = np.abs(depth)
-    xnew= np.arange(0,depth+500)
-    ynew = heat_function[0](xnew)
-    low = np.nanmean(ynew[xnew<75])
-    high = np.nanmax(ynew[xnew>75])
-
-    if ~np.isnan(high) and ~np.isnan(low):
-        return (high-low)/2#np.trapz(ynew,xnew)/len(xnew)
-    else:
-        return np.nan
-
-
-
 def heat_by_shelf(polygons,heat_functions,baths,bedvalues,grid,physical,withGLIB=True,intsize=50):
     shelf_heat_content = []
     shelf_heat_content_byshelf={}
@@ -311,23 +280,6 @@ def heat_by_shelf(polygons,heat_functions,baths,bedvalues,grid,physical,withGLIB
         else:
             shelf_heat_content.append(np.nan)
     return shelf_heat_content, shelf_heat_content_byshelf
-
-def extract_rignot_massloss2019(fname):
-    dfs = pd.read_excel(fname,sheet_name=None)
-    dfs = dfs['Dataset_S1_PNAS_2018']
-    rignot_shelf_massloss={}
-    rignot_shelf_areas = {}
-    sigma = {}
-    for l in range(len(dfs["Glacier name"])):
-        if  dfs["Glacier name"][l] and type(dfs["σ SMB"][l])==float:
-            try:
-                sigma[dfs["Glacier name"][l]]= float(dfs["σ SMB"][l])+float(dfs["σ D"][l])
-                rignot_shelf_massloss[dfs["Glacier name"][l]] = dfs["Cumul Balance"][l]
-                rignot_shelf_areas[dfs["Glacier name"][l]] = dfs["Basin.1"][l]
-            except:
-                1+1
-            
-    return rignot_shelf_massloss, rignot_shelf_areas,sigma
 
 def extract_rignot_massloss2013(fname):
     dfs = pd.read_excel(fname,sheet_name=None)
@@ -391,75 +343,6 @@ def extract_adusumilli(fname):
                 sigma[shelfname] = sig
             
     return rignot_shelf_my,areas,sigma
-
-
-def polyna_bathtub(bed,grid,GLIBregions):
-    llset = open_CtlDataset('data/polynall.ctl')
-    llset = llset.rename({"lat":"y","lon":"x"})
-    llset = llset.rio.write_crs("epsg:4326")
-    llset["pr"] = llset.pr.mean(axis=0)
-    llset.rio.nodata=np.nan
-    llset = llset.rio.reproject("epsg:3031")
-    llset = llset.interp(x=bed.x.values,y=bed.y.values)
-    llset.pr.values[llset.pr.values>1000]=np.nan
-    prs = llset.pr.values
-    polyna_rates = []
-    print("Calculating polyna bathtubs")
-    alreadycalced={}
-    for l in tqdm(range(len(grid))):
-        regionid = GLIBregions[grid[l][0],grid[l][1]]
-        if regionid not in alreadycalced.keys():
-            polyna_rates.append(np.nansum(prs[GLIBregions==regionid]))
-            alreadycalced[regionid]=polyna_rates[-1]
-        else:
-            polyna_rates.append(0)
-
-
-    return polyna_rates
-
-
-
-def polyna_dataset(polygons):
-    llset = open_CtlDataset('data/polynall.ctl')
-    llset = llset.rename({"lat":"y","lon":"x"})
-    llset = llset.rio.write_crs("epsg:4326")
-    llset["pr"] = llset.pr.mean(axis=0)
-    llset.rio.nodata=np.nan
-    llset = llset.rio.reproject("epsg:3031")
-
-    llset.pr.values[llset.pr.values>1000]=np.nan
-    llset.rio.to_raster("data/polyna.tif")
-    plt.show()
-    polyna_rates = {}
-    for k in tqdm(polygons.keys()):
-        raster = riox.open_rasterio('data/polyna.tif')
-        raster = raster.rio.write_crs("epsg:3031")
-        gons = []
-        parts = polygons[k][1]
-        polygon = polygons[k][0]
-        delta = 0
-        if len(parts)>1:
-            parts.append(-1)
-            for l in range(0,len(parts)-1):
-                poly_path=shapely.geometry.Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T).buffer(10**4)
-                gons.append(poly_path)
-                delta+=gons[-1].length
-        else:
-            gons = [polygon.buffer(10**4)]
-            delta+=polygon.length
-        print(k)
-        print("made it hearEisopycnals")
-        clipped = raster.rio.clip(gons,all_touched=True)
-        clipped = np.asarray(clipped)
-        clipped[clipped>30000000]=np.nan
-        if k == "Ronne" and False:
-            plt.imshow(clipped[0])
-            plt.colorbar()
-            plt.show()
-            polyna_rates[k] = np.nanmax(clipped)#/delta
-        del clipped
-
-    return polyna_rates
 
 def closest_point_for_graphing(grid,bedvalues,icemask,bordermask,baths,l):
     bath = baths[l]
@@ -620,9 +503,6 @@ def closest_WOA_points(grid,baths,bedmach,debug=False,method="simple"):
     elif method=="simple":
         return closest_WOA_points_simple(grid,baths,bedmach,debug=False)
 
-def running_mean(x, N):
-    cumsum = np.nancumsum(np.insert(x, 0, 0)) 
-    return (cumsum[N:] - cumsum[:-N]) / float(N)
 
 def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shelves,debug=False,quant="glibheat",shelfkeys=None):
     print("temp from closest point")
@@ -698,116 +578,6 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shel
         plt.show()
     return heats
 
-def tempFromClosestPointSimple(bedmap,grid,physical,baths,closest_points,sal,temp,debug=False,method="default"):
-    print("temp from closest point")
-    heats=[np.nan]*len(baths)
-    stx = sal.coords["x"].values
-    sty = sal.coords["y"].values
-    salvals,tempvals = sal.s_an.values[0,:,:,:],temp.t_an.values[0,:,:,:]
-    d  = sal.depth.values
-    mask = np.zeros(salvals.shape[1:])
-    mask[:]=np.inf
-    for l in range(salvals.shape[1]):
-        for k in range(salvals.shape[2]):
-            if np.sum(~np.isnan(salvals[:,l,k]))>0 and np.max(d[~np.isnan(salvals[:,l,k])])>2000:
-                mask[l,k] = 1
-    count = 0
-    lines = []
-    bedvalues = bedmap.bed.values
-    for l in tqdm(range(int(len(closest_points)))):
-        if ~np.isnan(closest_points[l]).any():
-            count+=1
-            centroid = [bedmap.coords["x"].values[grid[l][1]],bedmap.coords["y"].values[grid[l][0]]]
-            rdist = np.sqrt((sal.coords["x"]-centroid[0])**2 + (sal.coords["y"]- centroid[1])**2)*mask
-            closest=np.unravel_index(rdist.argmin(), rdist.shape)
-            x = stx[closest[0],closest[1]]
-            y = sty[closest[0],closest[1]]
-            t = tempvals[:,closest[0],closest[1]]
-            s = salvals[:,closest[0],closest[1]]
-            line = ([physical[l][0],physical[l][1]],[x,y])
-            dist = np.sqrt((physical[l][0]-x)**2 + (physical[l][1]-y)**2)
-            if ~(np.isnan(line).any()):
-                lines.append(line)
-            tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
-            # plt.scatter(t,d)
-            # plt.plot(tinterp(d),d)
-            # print(tinterp(d))
-            # plt.show()
-            if ~(np.isnan(line).any()):
-                lines.append(line)
-            if np.isnan(t[11:]).all():
-                heats[l]=np.nan
-            elif np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
-                heats[l]=heat_content((tinterp,sinterp),baths[l],6000,0)#*((baths[l]-bedvalues[grid[l][1],grid[1][0]])/(dist))
-    if debug:
-        fig, ax = plt.subplots()
-        lc = mc.LineCollection(lines, colors="red", linewidths=2)
-        #ax.imshow(bedvalues)
-        plt.xlim(-10**7,10**7)
-        plt.ylim(-10**7,10**7)
-        ax.add_collection(lc)
-        plt.show()
-    return heats
-
-def tempProfileByShelf(bedmap,grid,physical,depths,closest_points,sal,temp,shelf_keys,debug=False,method="default"):
-    print("temp from closest point")
-    stx = sal.coords["x"].values
-    sty = sal.coords["y"].values
-    salvals,tempvals = sal.s_an.values[0,:,:,:],temp.t_an.values[0,:,:,:]
-    d  = sal.depth.values
-    mask = np.zeros(salvals.shape[1:])
-    mask[:]=np.inf
-    for l in range(salvals.shape[1]):
-        for k in range(salvals.shape[2]):
-            if np.sum(~np.isnan(salvals[:,l,k]))>2 and np.max(d[~np.isnan(salvals[:,l,k])])>1500:
-                mask[l,k] = 1
-    count = 0
-    lines = []
-    bedvalues = bedmap.bed.values
-    tempprofs = []
-    salprofs = []
-    for l in tqdm(range(int(len(closest_points)))):
-        if ~np.isnan(closest_points[l]).any():
-            count+=1
-            centroid = [bedmap.coords["x"].values[grid[l][1]],bedmap.coords["y"].values[grid[l][0]]]
-            rdist = np.sqrt((sal.coords["x"]-centroid[0])**2 + (sal.coords["y"]- centroid[1])**2)*mask
-            #rdist[np.where(rdist<250000)]=np.inf
-            closest=np.unravel_index(rdist.argmin(), rdist.shape)
-            x = stx[closest[0],closest[1]]
-            y = sty[closest[0],closest[1]]
-            t = tempvals[:,closest[0],closest[1]]
-            s = salvals[:,closest[0],closest[1]]
-            line = ([physical[l][0],physical[l][1]],[x,y])
-            dist = np.sqrt((physical[l][0]-x)**2 + (physical[l][1]-y)**2)
-            if ~(np.isnan(line).any()):
-                lines.append(line)
-            #tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
-            tempprofs.append(t)
-            salprofs.append(s)
-            line = ([x,y],[centroid[0],centroid[1]])
-    tempprofs = np.asarray(tempprofs)
-    salprofs = np.asarray(salprofs)
-    prof_dict = {}
-    shelf_keys = np.asarray(shelf_keys)
-    shelf_keys[shelf_keys==None] = "None"
-
-    fig, ax = plt.subplots()
-    mask[np.isinf(mask)] = np.nan
-    plt.scatter(stx[~np.isnan(mask)],sty[~np.isnan(mask)])
-    lc = mc.LineCollection(lines, colors="red", linewidths=2)
-    #ax.imshow(bedvalues)
-    plt.xlim(-10**7,10**7)
-    plt.ylim(-10**7,10**7)
-    ax.add_collection(lc)
-    plt.show()
-
-    for k in np.unique(shelf_keys):
-        if k !="None":
-            t = np.mean(tempprofs[shelf_keys==k],axis=0)
-            s = np.mean(salprofs[shelf_keys==k],axis=0)
-            idd = np.nanmin(np.asarray(depths)[shelf_keys==k])
-            prof_dict[k] = (t,s,d,idd)
-    return prof_dict
 
 def GLIB_by_shelf(GLIB,bedmach,polygons):
     GLIBmach = bedmach.bed.copy(deep=True)
@@ -913,104 +683,6 @@ def slope_by_shelf(bedmach,polygons):
         glib_by_shelf[k] = np.nanmedian(grad)
     plt.show()
     return glib_by_shelf
-
-def new_slope(bedmach,polygons):
-    GLIBmach = bedmach.thickness.copy(deep=True)
-    print(bedmach)
-    GLIBmach.values[:] = gaussian_filter(bedmach.surface.values[:]-bedmach.thickness.values[:],10)
-    GLIBmach.values[np.logical_or(bedmach.icemask_grounded_and_shelves==0,np.isnan(bedmach.icemask_grounded_and_shelves))]=np.nan
-    GLIBmach = GLIBmach.rio.write_crs("epsg:3031")
-    print(GLIBmach)
-    del GLIBmach.attrs['grid_mapping']
-    GLIBmach.rio.to_raster("data/glibmach.tif")
-
-    glib_by_shelf = {}
-    for k in tqdm(polygons.keys()):
-        k="Thwaites"
-        raster = riox.open_rasterio('data/glibmach.tif')
-        gons = []
-        parts = polygons[k][1]
-        polygon = polygons[k][0]
-        if len(parts)>1:
-            parts.append(-1)
-            for l in range(0,len(parts)-1):
-                poly_path=shapely.geometry.Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T)#.buffer(10**4)
-                gons.append(poly_path)
-        else:
-            gons = [polygon]
-        print(k)
-        print("made it hearE")
-        clipped = raster.rio.clip(gons)[0]
-        clipped = np.asarray(clipped)
-        clipped[clipped<-9000] = np.nan
-        X = np.asarray(range(clipped.shape[0]))*(500)
-        Y = np.asarray(range(clipped.shape[1]))*(500)
-        XX,YY = np.meshgrid(X,Y)
-        print(XX.flatten().shape)
-        out = clipped.flatten()
-        X = np.concatenate(([XX.flatten()[~np.isnan(out)]],[YY.flatten()[~np.isnan(out)]]),axis=0)
-        out = np.asarray([out[~np.isnan(out)]])
-        lin_reg = LinearRegression()
-        plt.imshow(clipped)
-        plt.show()
-
-        print(X.shape,out.shape)
-        if out.shape[1]>5:
-            lin_reg.fit(X.T,out.T)
-            slope = lin_reg.coef_[0]
-            print(lin_reg.intercept_)
-
-            fig = plt.figure()
-            ax = fig.add_subplot(projection='3d')
-            Xpred = lin_reg.predict(X.T)
-            ax.scatter(X[0,:],X[1,:],Xpred)
-            ax.scatter(X[0,:],X[1,:],out)
-            plt.show()
-            glib_by_shelf[k] = np.sqrt(slope[0]**2 + slope[1]**2)
-        else:
-            glib_by_shelf[k] = np.nan
-    plt.show()
-    return glib_by_shelf
-
-
-def volumes_by_shelf(bedmach,polygons):
-    GLIBmach = bedmach.bed.copy(deep=True)
-    print(bedmach)
-    GLIBmach.values[:] = (bedmach.surface.values[:]-bedmach.thickness.values[:])#-bedmach.bed.values
-    GLIBmach.values[np.logical_or(bedmach.icemask_grounded_and_shelves==0,np.isnan(bedmach.icemask_grounded_and_shelves))]=np.nan
-    GLIBmach = GLIBmach.rio.write_crs("epsg:3031")
-    print(GLIBmach)
-    del GLIBmach.attrs['grid_mapping']
-    GLIBmach.rio.to_raster("data/glibmach.tif")
-
-    glib_by_shelf = {}
-    for k in tqdm(polygons.keys()):
-        raster = riox.open_rasterio('data/glibmach.tif')
-        gons = []
-        parts = polygons[k][1]
-        polygon = polygons[k][0]
-        if len(parts)>1:
-            parts.append(-1)
-            for l in range(0,len(parts)-1):
-                poly_path=shapely.geometry.Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T)#.buffer(10**4)
-                gons.append(poly_path)
-        else:
-            gons = [polygon]
-        print(k)
-        print("made it hearE")
-        clipped = raster.rio.clip(gons)[0]
-        clipped = np.asarray(clipped)
-        clipped[clipped<-9000] = np.nan
-        #grad = np.gradient(clipped)
-        if k == "Thwaites" and True:
-            plt.imshow(clipped)
-            plt.colorbar()
-            plt.show()
-        glib_by_shelf[k] = np.nansum(clipped<np.nanquantile(clipped,0.05)+100)/np.sum(~np.isnan(clipped))
-    plt.show()
-    return glib_by_shelf
-
-
 
 
 def closestMethodologyFig(bedmap,grid,physical,baths,closest_points,sal,temp,shelves,debug=False,quant="glibheat",shelfkeys=None,point_i=55900):
