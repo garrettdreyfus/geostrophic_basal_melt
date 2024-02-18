@@ -18,8 +18,6 @@ import matplotlib.colors as colors
 import cdw
 from tqdm import tqdm
 import xarray as xr
-import winds as wind
-from Lazeroms import LazeromsM
 
 # Create GLIB
 
@@ -28,7 +26,8 @@ writeShelfNumbers = False
 writeGLIB = False
 writePolygons = False
 writeGL =False
-createWOA = False
+createWOA = True
+createGISS = True
 createClosestWOA = False
 
 with open("data/shelfpolygons.pickle","rb") as f:
@@ -87,6 +86,7 @@ with open("data/shelfpolygons.pickle","rb") as f:
 
 ##################################################
 
+
 if writeShelfNumbers:
     with open("data/shelfnumbers.pickle","wb") as f:
         pickle.dump(bt.shelf_numbering(polygons,bedmach),f)
@@ -117,6 +117,14 @@ for l in range(len(grid)):
 ################################################
 
 ################################################
+if createGISS:
+    gisssal,gisstemp = woa.create_GISS(bedmach)
+    with open("data/summergiss.pickle","wb") as f:
+        pickle.dump([gisssal,gisstemp],f)
+
+with open("data/summergiss.pickle","rb") as f:
+    gisssal,gisstemp = pickle.load(f)
+
 
 if createWOA:
     sal,temp = woa.create_WOA(bedmach)
@@ -152,12 +160,12 @@ with open("data/physical_ice.pickle","rb") as f:
     physical_ice,shelf_keys_edge = pickle.load(f)
 
 #slopes = cdw.slopeFromClosestPoint(bedmach,physical_ice,grid,physical,depths,closest_points,shelf_keys,shelf_keys_edge)
-#glibheats = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="glibheat",debug=False)
+glibheats = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="glibheat",debug=False)
 #layertemp = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="newtemp")
 #hubsalts = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="glibheat")
-#gprimes = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="gprime")
+gprimes = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="gprime")
 #dsalts = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="dsalt")
-#cdwdepths = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="cdwdepth",debug=True)
+cdwdepths = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="cdwdepth",debug=True)
 #distances = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="distance")
 #isopycnaldepths = cdw.tempFromClosestPoint(bedmach,grid,physical,glibs,closest_points,sal,temp,shelf_keys,quant="thermocline",shelfkeys=shelf_keys)
 #physical = np.asarray(physical)
@@ -182,8 +190,8 @@ with open("data/layertemp.pickle","rb") as f:
 
 #with open("data/hub_shelf_thermals.pickle","wb") as f:
     #pickle.dump(glibheats,f)
-with open("data/hub_shelf_thermals.pickle","rb") as f:
-    glibheats = pickle.load(f)
+#with open("data/hub_shelf_thermals.pickle","rb") as f:
+    #glibheats = pickle.load(f)
 #glibheats = layertemp
 #with open("data/hub_shelf_salts.pickle","wb") as f:
     #pickle.dump(hubsalts,f)
@@ -192,13 +200,13 @@ with open("data/hub_shelf_salts.pickle","rb") as f:
 
 #with open("data/cdwdepths.pickle","wb") as f:
     #pickle.dump(cdwdepths,f)
-with open("data/cdwdepths.pickle","rb") as f:
-    cdwdepths = pickle.load(f)
+#with open("data/cdwdepths.pickle","rb") as f:
+    #cdwdepths = pickle.load(f)
 
 #with open("data/gprimes.pickle","wb") as f:
     #pickle.dump(gprimes,f)
-with open("data/gprimes.pickle","rb") as f:
-    gprimes = pickle.load(f)
+#with open("data/gprimes.pickle","rb") as f:
+    #gprimes = pickle.load(f)
 
 #with open("data/isopycnaldepths.pickle","wb") as f:
     #pickle.dump(isopycnaldepths,f)
@@ -255,7 +263,6 @@ gldepths_by_shelf = bt.shelf_sort(shelf_keys,depths)
 glibs_by_shelf = bt.shelf_sort(shelf_keys,glibs)
 distances_by_shelf = bt.shelf_sort(shelf_keys,glibs)
 hubdeltas_by_shelf = bt.shelf_sort(shelf_keys,np.asarray(depths)-np.asarray(baths))
-winds_by_shelf = wind.AMPS_wind(polygons,"data/AMPS_winds.mat",icemask)
 #rignot_shelf_massloss,rignot_shelf_areas,sigma = cdw.extract_rignot_massloss2019("data/rignot2019.xlsx")
 #rignot_shelf_massloss,sigmas_by_shelf = cdw.extract_rignot_massloss2013("data/rignot2013.xlsx")
 #rignot_shelf_massloss = bt.shelf_mass_loss('data/amundsilli.h5',polygons)
@@ -298,7 +305,6 @@ distances = []
 hubdeltas = []
 polynas = []
 gllengths=[]
-winds = []
 salts = []
 
 
@@ -334,7 +340,6 @@ for k in slopes_by_shelf.keys():
         hubdeltas.append(np.nanmean(hubdeltas_by_shelf[k]))
         polynas.append(np.nanmean(polyna_by_shelf[k]))
         salts.append(np.nanmean(salts_by_shelf[k]))
-        winds.append(np.nanmean(winds_by_shelf[k]))
         if k == "Amery":
             sigmas.append(0.7)
             areas.append(0)
@@ -584,7 +589,6 @@ glibs = np.asarray(glibshelf)
 sigmas = np.asarray(sigmas)
 slopes = np.asarray(slopes)
 areas = np.asarray(areas)
-winds = np.asarray(winds)
 volumes = np.asarray(volumes)
 thermals = np.asarray(thermals)
 hubdeltas = np.asarray(hubdeltas)

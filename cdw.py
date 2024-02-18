@@ -20,6 +20,7 @@ from matplotlib import collections  as mc
 from functools import partial
 from tqdm.contrib.concurrent import process_map
 from scipy.ndimage import binary_dilation as bd, label, gaussian_filter 
+from scipy.io import savemat
 import rioxarray as riox
 import rasterio
 
@@ -66,7 +67,7 @@ def newtemp(heat_function,hub,shelf_key=None):
 
 def gprime(heat_function,hub,shelf_key=None,lat=None,lon=None):
     hub = np.abs(hub)
-    zi = np.arange(0,1500,1)
+    zi = np.arange(5,1500,1)
     ti = heat_function[0](zi)
     si = heat_function[1](zi)
     di = gsw.rho(si,ti,300)-1000
@@ -110,7 +111,7 @@ def gprime(heat_function,hub,shelf_key=None,lat=None,lon=None):
 
 def pycnocline(heat_function,hub,shelf_key=None,lat=None,lon=None):
     hub = np.abs(hub)
-    zi = np.arange(0,1500,1)
+    zi = np.arange(5,1500,1)
     ti = heat_function[0](zi)
     si = heat_function[1](zi)
     di = gsw.rho(si,ti,300)-1000
@@ -158,7 +159,7 @@ def pycnocline(heat_function,hub,shelf_key=None,lat=None,lon=None):
 
 def heat_content(heat_function,depth,plusminus):
     depth = np.abs(depth)
-    xnew= np.arange(max(0,depth-plusminus),depth)
+    xnew= np.arange(max(5,depth-plusminus),depth)
     #xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,1500))
     ynew = heat_function[0](xnew)
     ynew = ynew - gsw.CT_freezing(heat_function[1](xnew),xnew,0)
@@ -481,6 +482,7 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shel
     projection = pyproj.Proj("epsg:3031")
     salvals,tempvals = sal.s_an.values[0,:,:,:],temp.t_an.values[0,:,:,:]
     d  = sal.depth.values
+    print(d)
     lines = []
     bedvalues = bedmap.bed.values
     mask = np.zeros(salvals.shape[1:])
@@ -507,6 +509,9 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shel
             t = gsw.CT_from_t(s,t,d)
             line = ([physical[l][0],physical[l][1]],[centroid[0],centroid[1]])
             dist = np.sqrt((physical[l][1]-x)**2 + (physical[l][0]-y)**2)
+            #if shelves[l]=="Getz":
+                #plt.plot(t,-d)
+                #plt.show()
 
             if ~(np.isnan(line).any()):
                 lines.append(line)
@@ -614,6 +619,7 @@ def slope_by_shelf(bedmach,polygons):
     GLIBmach.rio.to_raster("data/glibmach.tif")
 
     glib_by_shelf = {}
+    full_info = {}
     for k in tqdm(polygons.keys()):
         raster = riox.open_rasterio('data/glibmach.tif')
         gons = []
@@ -645,7 +651,11 @@ def slope_by_shelf(bedmach,polygons):
             plt.show()
         #glib_by_shelf[k] = np.nanmedian(grad[grad<np.nanquantile(grad,0.75)])
         glib_by_shelf[k] = np.nanmedian(grad)
+        full_info[k] = copy(clipped)
+
+    savemat("full_info.mat",full_info)
     plt.show()
+
     return glib_by_shelf
 
 
