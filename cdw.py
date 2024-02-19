@@ -92,18 +92,7 @@ def gprime(heat_function,hub,shelf_key=None,lat=None,lon=None):
     rho_1i = np.logical_and(zi<zi[zpyci],zi>zi[zpyci]-zpyci)
     rho_2i = np.logical_and(zi<zi[zpyci]+zpyci,zi>zi[zpyci])
     gprime_ext = 9.8*(np.mean(di[rho_1i])-np.mean(di[rho_2i]))/np.mean(di[np.logical_or(rho_1i,rho_2i)])
-
-    if shelf_key == "Holmes" and False:# and (-zpyc+hub) < 75:
-        fig,(ax1,ax2) = plt.subplots(1,2)
-        ax1.plot(di,-zi)
-        ax1.axhline(y=-zpyc,color="red",label="pyc")
-        ax1.axhline(y=-hub,color="blue",label="hub")
-        ax2.axhline(y=-mld,color="green",label="mld")
-        ax2.plot(ti,-zi)
-        ax1.legend()
-        plt.title(str(round(lat,1))+" , "+str(round(lon,1)))
-        plt.show()
-        
+       
     if ~(np.isnan(di).all()):
         return gprime_ext
     else:
@@ -473,6 +462,79 @@ def closest_WOA_points(grid,baths,bedmach,debug=False,method="simple"):
     elif method=="simple":
         return closest_WOA_points_simple(grid,baths,bedmach,debug=False)
 
+def closestHydro(bedmap,grid,physical,closest_points,sal,temp,shelves):
+    print("temp from closest point")
+    indexes=[np.nan]*len(physical)
+    stx = sal.coords["x"].values
+    sty = sal.coords["y"].values
+    projection = pyproj.Proj("epsg:3031")
+    salvals,tempvals = sal.s_an.values[0,:,:,:],temp.t_an.values[0,:,:,:]
+    d  = sal.depth.values
+    lines = []
+    bedvalues = bedmap.bed.values
+    mask = np.zeros(salvals.shape[1:])
+
+    mask[:]=np.inf
+    for l in range(salvals.shape[1]):
+        for k in range(salvals.shape[2]):
+            if np.sum(~np.isnan(salvals[:,l,k]))>0 and np.max(d[~np.isnan(salvals[:,l,k])])>1500:
+                mask[l,k] = 1
+    for l in tqdm(range(len(closest_points))[::-1]):
+        if ~np.isnan(closest_points[l]).any():
+            centroid = [bedmap.coords["x"].values[closest_points[l][1]],bedmap.coords["y"].values[closest_points[l][0]]]
+            rdist = np.sqrt((sal.coords["x"]- centroid[0])**2 + (sal.coords["y"] - centroid[1])**2)
+            rdist = rdist*mask
+            indexes[l] = int(rdist.argmin())
+    return indexes
+        
+def revampedClosest(bedmap,grid,physical,baths,closest_hydro,sal,temp,shelves,debug=False,quant="glibheat",shelfkeys=None,timestep=0):
+    heats=np.empty((sal.s_an.shape[0],len(physical)))
+    cdws=np.empty((sal.s_an.shape[0],len(physical)))
+    gprimes=np.empty((sal.s_an.shape[0],len(physical)))
+    heats[:]=np.nan
+    cdws[:]=np.nan
+    gprimes[:]=np.nan
+    reshapeval = sal.coords["x"].shape
+    stx = sal.coords["x"].values
+    sty = sal.coords["y"].values
+    projection = pyproj.Proj("epsg:3031")
+    salvals,tempvals = sal.s_an.values,temp.t_an.values
+    d  = sal.depth.values
+    lines = []
+    bedvalues = bedmap.bed.values
+    bedynamic = {}
+ 
+    for l in tqdm(range(len(closest_hydro))):
+        val = closest_hydro[l]
+        if ~np.isnan(val):
+            closest=np.unravel_index(int(val), sal.coords["x"].shape)
+            x = stx[closest[0],closest[1]]
+            y = sty[closest[0],closest[1]]
+            lon,lat = projection(x,y,inverse=True)
+            for timestep in range(salvals.shape[0]):
+                if (val,timestep,baths[l]) in bedynamic:
+                    heats[timestep,l]=heats[timestep,bedynamic[(val,timestep,baths[l])]]
+                    cdws[timestep,l]=cdws[timestep,bedynamic[(val,timestep,baths[l])]]
+                    gprimes[timestep,l]=gprimes[timestep,bedynamic[(val,timestep,baths[l])]]
+                else:
+                    bedynamic[(val,timestep,baths[l])] = l
+                    t = tempvals[timestep,:,closest[0],closest[1]]
+                    s = salvals[timestep,:,closest[0],closest[1]]
+                    s = gsw.SA_from_SP(s,d,lon,lat)
+                    #FOR MIMOC MAKE PT
+                    #t = gsw.CT_from_pt(s,t)
+                    t = gsw.CT_from_t(s,t,d)
+
+                    tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
+                    if np.isnan(t[11:]).all():
+                        heats[timestep,l]=np.nan#
+                    elif np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
+                        heats[timestep,l]=heat_content((tinterp,sinterp),baths[l],100)
+                        cdws[timestep,l]=pycnocline((tinterp,sinterp),baths[l],shelf_key=shelves[l],lat=lat,lon=lon)
+                        gprimes[timestep,l]=gprime((tinterp,sinterp),baths[l],shelf_key=shelves[l],lat=lat,lon=lon)
+    return heats,cdws,gprimes
+
+
 
 def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shelves,debug=False,quant="glibheat",shelfkeys=None):
     print("temp from closest point")
@@ -482,7 +544,6 @@ def tempFromClosestPoint(bedmap,grid,physical,baths,closest_points,sal,temp,shel
     projection = pyproj.Proj("epsg:3031")
     salvals,tempvals = sal.s_an.values[0,:,:,:],temp.t_an.values[0,:,:,:]
     d  = sal.depth.values
-    print(d)
     lines = []
     bedvalues = bedmap.bed.values
     mask = np.zeros(salvals.shape[1:])

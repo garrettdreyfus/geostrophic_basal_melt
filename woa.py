@@ -7,7 +7,6 @@ def create_WOA(bed,debug = False):
    bedmap = bed
    salfname,tempfname = "data/woa23_decav91C0_s00_04.nc","data/woa23_decav91C0_t00_04.nc"
 
-
    #salfname,tempfname = "data/woa18_decav_s15_04.nc","data/woa18_decav_t15_04.nc"
    sal = xarray.open_dataset(salfname,decode_times=False)
    temp = xarray.open_dataset(tempfname,decode_times=False)
@@ -123,7 +122,7 @@ def create_MIMOC(bed,debug = False):
 
 def create_GISS(bed,debug = False):
    bedmap = bed
-   salfname,tempfname = "data/so_Omon_GISS-E2-1-G_historical_r201i1p1f2_gn_199001-200912.nc","data/thetao_Omon_GISS-E2-1-G_historical_r201i1p1f2_gn_199001-200912.nc"
+   salfname,tempfname = "data/so_Omon_GISS-E2-1-G_historical_r202i1p1f4_gn_199001-200912.nc","data/thetao_Omon_GISS-E2-1-G_historical_r202i1p1f4_gn_199001-200912.nc"
    #salfname,tempfname = "data/woa18_decav_s15_04.nc","data/woa18_decav_t15_04.nc"
    sal = xarray.open_dataset(salfname,decode_times=False)
    temp = xarray.open_dataset(tempfname,decode_times=False)

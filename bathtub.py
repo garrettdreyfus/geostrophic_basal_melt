@@ -188,12 +188,16 @@ def convert_bedmachine(fname,coarsenfact=1):
 
 def shelf_sort(shelf_keys,quant):
     shelf_dict = {}
+    quant = np.asarray(quant)
     for l in range(len(shelf_keys)):
         k = shelf_keys[l]
         if k:
             if k not in shelf_dict:
                 shelf_dict[k]=[]
-            shelf_dict[k].append(quant[l])
+            if len(np.shape(quant))>1:
+                shelf_dict[k].append(quant[:,l])
+            else:
+                shelf_dict[k].append(quant[l])
     return shelf_dict
 
  
