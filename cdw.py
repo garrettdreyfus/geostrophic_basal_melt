@@ -486,6 +486,44 @@ def closestHydro(bedmap,grid,physical,closest_points,sal,temp,shelves):
             rdist = rdist*mask
             indexes[l] = int(rdist.argmin())
     return indexes
+
+def averageForShelf(soi,bedmap,grid,physical,baths,closest_hydro,sal,temp,shelves,debug=False,quant="glibheat",shelfkeys=None,timestep=0):
+    reshapeval = sal.coords["x"].shape
+    stx = sal.coords["x"].values
+    sty = sal.coords["y"].values
+    projection = pyproj.Proj("epsg:3031")
+    salvals,tempvals = sal.s_an.values,temp.t_an.values
+    d  = sal.depth.values
+    lines = []
+    bedvalues = bedmap.bed.values
+    bedynamic = {}
+    avg_t = []
+    avg_s = []
+    for l in tqdm(range(len(closest_hydro))):
+        if soi ==shelves[l]:
+            val = closest_hydro[l]
+            if ~np.isnan(val):
+                closest=np.unravel_index(int(val), sal.coords["x"].shape)
+                x = stx[closest[0],closest[1]]
+                y = sty[closest[0],closest[1]]
+                lon,lat = projection(x,y,inverse=True)
+                for timestep in range(salvals.shape[0]):
+                    t = tempvals[timestep,:,closest[0],closest[1]]
+                    s = salvals[timestep,:,closest[0],closest[1]]
+                    s = gsw.SA_from_SP(s,d,lon,lat)
+                    #FOR MIMOC MAKE PT
+                    #t = gsw.CT_from_pt(s,t)
+                    t = gsw.CT_from_t(s,t,d)
+                    avg_t.append(t)
+                    avg_s.append(s)
+    avg_t = np.asarray(avg_t)
+    avg_s = np.asarray(avg_s)
+    print(np.shape(avg_t))
+    print(np.shape(avg_s))
+
+    avg_t = np.mean(avg_t,axis=0)
+    avg_s = np.mean(avg_s,axis=0)
+    return avg_s,avg_t,d
         
 def revampedClosest(bedmap,grid,physical,baths,closest_hydro,sal,temp,shelves,debug=False,quant="glibheat",shelfkeys=None,timestep=0):
     heats=np.empty((sal.s_an.shape[0],len(physical)))

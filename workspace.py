@@ -133,6 +133,8 @@ if createWOA:
 
 with open("data/woathree.pickle","rb") as f:
     sal,temp = pickle.load(f)
+
+
 print(np.shape(sal.s_an.values))
 if createClosestWOA:
     closest_points = cdw.closest_WOA_points(grid,zerobaths,bedmach,method="bfs")
@@ -153,8 +155,13 @@ for l in range(len(baths)):
 
 #with open("data/closest_hydro_woathree.pickle","wb") as f:
     #pickle.dump(closest_hydro,f)
-with open("data/closest_hydro_giss.pickle","rb") as f:
+with open("data/closest_hydro_woathree.pickle","rb") as f:
     closest_hydro = pickle.load(f)
+
+avg_s,avg_t,depths = cdw.averageForShelf("Thwaites",bedmach,grid,physical,glibs,closest_hydro,sal,temp,shelf_keys,quant="glibheat",debug=False)
+with open("data/ThwaitesAverages.pickle","wb") as f:
+    pickle.dump((avg_t,avg_s,depths),f)
+exit()
 
 
 shelf_areas = bt.shelf_areas()
@@ -164,7 +171,7 @@ grid = np.asarray(grid)
 
 #with open("data/stats_woathree.pickle","wb") as f:
     #pickle.dump((glibheats,cdwdepths,gprimes),f)
-with open("data/stats_gissr2.pickle","rb") as f:
+with open("data/stats_woathree.pickle","rb") as f:
     (glibheats,cdwdepths,gprimes) = pickle.load(f)
 
 #with open("data/glibheats_gissr2.pickle","rb") as f:
@@ -249,6 +256,7 @@ glibshelf = np.asarray(glibshelf)
 cdws = np.asarray(cdws)
 print(np.shape(cdws))
 melts = cdws*np.asarray(thermals)*np.asarray(gprimes)*np.asarray(slopes)*np.asarray(fs)
+#melts = np.asarray(thermals)*np.asarray(thermals)*np.asarray(slopes)
 
 
 avmelts=np.mean(melts,axis=1)
@@ -262,7 +270,7 @@ xs = np.asarray(([avmelts])).reshape((-1, 1))
 model = LinearRegression().fit(xs, mys)
 print("regressed")
 r2 = model.score(xs,mys)
-print(model.coef_)
+print("coef: ",r2)
 warmC = model.coef_
 thresh=3
 finalproduct = np.empty(np.shape(melts))
