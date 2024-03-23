@@ -63,21 +63,20 @@ def gprime(heat_function,hub,shelf_key=None,lat=None,lon=None,debug=False):
     else:
         return np.nan
 
-def pycnocline(heat_function,hub,shelf_key=None,lat=None,lon=None,debug=False):
+def pycnocline(heat_function,hub,shelf_key=None,lat=None,lon=None):
     hub = np.abs(hub)
     zi = np.arange(5,1500,1)
     ti = moving_average(heat_function[0](zi),50)
     si = moving_average(heat_function[1](zi),50)
-    zi = moving_average(zi,50)
-
     di = gsw.rho(si,ti,zi)
     dizi = np.abs(np.diff(di)/np.diff(zi))
     thresh = np.quantile(dizi,0.85)
     zpyc = np.mean(zi[1:][dizi>thresh])
     zpyci = np.argmin(np.abs(zi-zpyc))
-    deltaH = -(zpyc)+(hub)
+    di = gsw.rho(si,ti,zpyc)-1000
+    gprime = (np.nanmean(di[zpyci:]) - np.nanmean(di[:zpyci]))/np.nanmean(di[:])
 
-    if debug:
+    if shelf_key == "Thwaites" and False:# and (-zpyc+hub) < 75:
         fig,(ax1,ax2) = plt.subplots(1,2)
         ax1.plot(ti,-zi)
         ax2.plot(ti,-zi)
@@ -94,10 +93,10 @@ def pycnocline(heat_function,hub,shelf_key=None,lat=None,lon=None,debug=False):
         ax1.legend()
         plt.title(str(round(lat,1))+" , "+str(round(lon,1)))
         plt.show()
-
+    H2 = -(zpyc)+(hub)
         
     if ~(np.isnan(di).all()):
-        return deltaH
+        return H2#*gprime
     else:
         return np.nan
 

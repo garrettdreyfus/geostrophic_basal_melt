@@ -26,17 +26,12 @@ writeShelfNumbers = False
 writeGLIB = False
 writePolygons = False
 writeGL =False
-createWOA = False
+createWOA = True
 createGISS = False
 createClosestWOA = False
 
 with open("data/shelfpolygons.pickle","rb") as f:
     polygons = pickle.load(f)
-
-#rignot_shelf_massloss =  bt.shelf_mass_loss("",polygons)
-
-#with open("data/onlypositivemelt.pickle","wb") as f:
-    #pickle.dump(rignot_shelf_massloss,f)
 
 ###############################################
 if writeBedMach:
@@ -52,11 +47,6 @@ with open("data/bedmach.pickle","rb") as f:
 bedvalues = bedmach.bed.values
 icemask = bedmach.icemask_grounded_and_shelves.values
 
-#GLIBregions = GLIB.generateGLIBsLabel(bedvalues,icemask)
-##with open("data/bedmachGLIBregions.pickle","wb") as f:
-    #pickle.dump(GLIBregions,f)
-#with open("data/bedmachGLIBregions.pickle","rb") as f:
-    #GLIBregions = pickle.load(f)
 ##################################################
 
 ##################################################
@@ -128,10 +118,10 @@ with open("data/giss_hydro_r2.pickle","rb") as f:
 
 if createWOA:
     sal,temp = woa.create_WOA(bedmach)
-    with open("data/woathree.pickle","wb") as f:
+    with open("data/woa.pickle","wb") as f:
         pickle.dump([sal,temp],f)
 
-with open("data/woathree.pickle","rb") as f:
+with open("data/woa.pickle","rb") as f:
     sal,temp = pickle.load(f)
 
 
@@ -158,20 +148,19 @@ for l in range(len(baths)):
 with open("data/closest_hydro_woathree.pickle","rb") as f:
     closest_hydro = pickle.load(f)
 
-avg_s,avg_t,depths = cdw.averageForShelf("Thwaites",bedmach,grid,physical,glibs,closest_hydro,sal,temp,shelf_keys,quant="glibheat",debug=False)
-with open("data/ThwaitesAverages.pickle","wb") as f:
-    pickle.dump((avg_t,avg_s,depths),f)
-exit()
+#avg_s,avg_t,depths = cdw.averageForShelf("Thwaites",bedmach,grid,physical,glibs,closest_hydro,sal,temp,shelf_keys,quant="glibheat",debug=False)
+#with open("data/ThwaitesAverages.pickle","wb") as f:
+    #pickle.dump((avg_t,avg_s,depths),f)
 
 
 shelf_areas = bt.shelf_areas()
-#glibheats,cdwdepths,gprimes = cdw.revampedClosest(bedmach,grid,physical,glibs,closest_hydro,sal,temp,shelf_keys,quant="glibheat",debug=False)
+glibheats,cdwdepths,gprimes = cdw.revampedClosest(bedmach,grid,physical,glibs,closest_hydro,sal,temp,shelf_keys,quant="glibheat",debug=False)
 physical = np.asarray(physical)
 grid = np.asarray(grid)
 
-#with open("data/stats_woathree.pickle","wb") as f:
-    #pickle.dump((glibheats,cdwdepths,gprimes),f)
-with open("data/stats_woathree.pickle","rb") as f:
+with open("data/stats_woa.pickle","wb") as f:
+    pickle.dump((glibheats,cdwdepths,gprimes),f)
+with open("data/stats_woa.pickle","rb") as f:
     (glibheats,cdwdepths,gprimes) = pickle.load(f)
 
 #with open("data/glibheats_gissr2.pickle","rb") as f:
@@ -181,9 +170,9 @@ with open("data/stats_woathree.pickle","rb") as f:
 #with open("data/gprimes_gissr2.pickle","rb") as f:
     #gprimes = pickle.load(f)
 
-#slopes_by_shelf = cdw.slope_by_shelf(bedmach,polygons)
-#with open("data/slopes_by_shelf.pickle","wb") as f:
-    #pickle.dump(slopes_by_shelf,f)
+# slopes_by_shelf = cdw.slope_by_shelf(bedmach,polygons)
+# with open("data/slopes_by_shelf.pickle","wb") as f:
+#     pickle.dump(slopes_by_shelf,f)
 with open("data/slopes_by_shelf.pickle","rb") as f:
     slopes_by_shelf = pickle.load(f)
 
@@ -218,7 +207,7 @@ sigmas = []
 labels = []
 
 for k in slopes_by_shelf.keys():
-    if (k in rignot_shelf_massloss and ~np.isnan(rignot_shelf_massloss[k]) and k!="George_VI")or k =="Amery" :
+    if (k in rignot_shelf_massloss and ~np.isnan(rignot_shelf_massloss[k]) and k!="George_VI" and ~np.isnan(slopes_by_shelf[k]))or k =="Amery" :
         x,y = (polygons[k][0].centroid.x,polygons[k][0].centroid.y)
         slopes.append(list([slopes_by_shelf[k]])*np.shape(hubheats_by_shelf[k])[1])
         labels.append(k)
@@ -271,6 +260,18 @@ model = LinearRegression().fit(xs, mys)
 print("regressed")
 r2 = model.score(xs,mys)
 print("coef: ",r2)
+rho0 = 1025
+rhoi = 910
+Cp = 4186
+If = 334000
+print(model.coef_)
+C = model.coef_
+print("C: ",C)
+#W0 = (rho0*Cp)/(rhoi*If*C)
+W0 =  100000#(rho0*Cp)/(rhoi*If*C)
+alpha =  C/((rho0*Cp)/(rhoi*If*W0))
+plt.scatter(melts,mys)
+plt.show()
 warmC = model.coef_
 thresh=3
 finalproduct = np.empty(np.shape(melts))
