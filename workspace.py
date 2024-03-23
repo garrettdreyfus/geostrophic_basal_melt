@@ -1,23 +1,13 @@
 import bathtub as bt
-import shapely
 import pickle
 import GLIB
-import time,gsw,xarray, pyproj
+import gsw,xarray, pyproj
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
 from sklearn.linear_model import LinearRegression
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.tree import export_graphviz
-from sklearn import preprocessing
-from sklearn import tree
 import numpy as np
-from sklearn.metrics import r2_score
 import woa
 import matplotlib.colors as colors
 import cdw
-from tqdm import tqdm
-import xarray as xr
 
 # Create GLIB
 
@@ -227,31 +217,16 @@ for k in slopes_by_shelf.keys():
             mys.append(rignot_shelf_massloss[k])
 
 
-#
-#qsandas = {}
-#for l in labels:
-    #ans = input(l)
-    #qsandas[l]=ans
-
-#print(qsandas)
-
-
-
-
-print("amde it here")
 areas = np.asarray(areas)
 slopes = np.asarray(slopes)
 glibshelf = np.asarray(glibshelf)
 cdws = np.asarray(cdws)
 print(np.shape(cdws))
 melts = cdws*np.asarray(thermals)*np.asarray(gprimes)*np.asarray(slopes)*np.asarray(fs)
-#melts = np.asarray(thermals)*np.asarray(thermals)*np.asarray(slopes)
 
 
 avmelts=np.mean(melts,axis=1)
 mys=np.asarray(mys)
-print("now here")
-#melts = np.asarray(thermals)*slopes
 
 #plt.scatter(melts*(rho0*spy*Cp*C)/(melten*kgtom),mys)
 plt.rc('axes', titlesize=24)     # fontsize of the axes title
@@ -271,6 +246,9 @@ print("C: ",C)
 W0 =  100000#(rho0*Cp)/(rhoi*If*C)
 alpha =  C/((rho0*Cp)/(rhoi*If*W0))
 plt.scatter(melts,mys)
+for k in range(len(labels)):
+    text= plt.annotate(labels[k],(melts[k],mys[k]))
+
 plt.show()
 warmC = model.coef_
 thresh=3
