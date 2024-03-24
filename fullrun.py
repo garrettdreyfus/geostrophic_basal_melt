@@ -10,15 +10,14 @@ import paperfigures as pf
 import cdw
 
 #These flags just make it easy to turn off and steps of the analysis 
-writeBedMach = False
-writeShelfNumbers = False
-writeHUB = False
-writePolygons = False
-writeGL =False
-createWOA = False
-createGISS = False
-createClosestShelfPoints = False
-createClosestHydro = False
+writeBedMach = True
+writeShelfNumbers = True
+writeHUB = True
+writePolygons = True
+writeGL = True
+createWOA = True
+createGISS = True
+createClosestShelfPoints = True
 createQuants = True
 createSlopes = True
 
@@ -83,9 +82,9 @@ with open("data/groundinglinepoints.pickle","rb") as f:
 ## Use the grid indices to get the HUBS for each grounding line point
 ################################################
 
-hubs = []
+baths = []
 for l in range(len(grid)):
-    hubs.append(HUB[grid[l][0]][grid[l][1]])
+    baths.append(HUB[grid[l][0]][grid[l][1]])
 
 ################################################
 # Extract the WOA salinity and temperature fields
@@ -106,7 +105,7 @@ with open("data/woa.pickle","rb") as f:
 ##      # but... this takes a lonngnggggg time. IF you want it precalculated email me!
 ################################################
 if createClosestShelfPoints:
-    closest_points = cdw.closest_shelfbreak_points_bfs(grid,zerohubs,bedmach,method="bfs")
+    closest_points = cdw.closest_shelfbreak_points_bfs(grid,zerobaths,bedmach,method="bfs")
     with open("data/closest_points.pickle","wb") as f:
         pickle.dump(closest_points,f)
 with open("data/closest_points.pickle","rb") as f:
@@ -138,7 +137,7 @@ if createQuants:
 with open("data/stats_woa.pickle","rb") as f:
     (hubheats,cdwdepths,gprimes) = pickle.load(f)
 
-if createSlopes:
+if createSlopes
     # slopes_by_shelf = cdw.slope_by_shelf(bedmach,polygons)
     # with open("data/slopes_by_shelf.pickle","wb") as f:
     #     pickle.dump(slopes_by_shelf,f)
@@ -200,7 +199,7 @@ areas = np.asarray(areas)
 slopes = np.asarray(slopes)
 hubshelf = np.asarray(hubshelf)
 cdws = np.asarray(cdws)
-pf.closestMethodologyFig(bedmach,grid,physical,hubs,closest_points,sal,temp,shelves)
+pf.closestMethodologyFig(bedmach,grid,physical,baths,closest_points,sal,temp,shelves)
 pf.hydro_vs_slope_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels)
 pf.hydro_vs_slope_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=1500,ylim=0.005,nozone=(-1000,-1000))
 pf.param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=5,ylim=5,textthresh=0,colorthresh=5)

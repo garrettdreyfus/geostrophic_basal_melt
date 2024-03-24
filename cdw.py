@@ -212,7 +212,7 @@ def closest_point_pfun(grid,bedmach,baths,l):
         return (np.nan,np.nan)
 
 
-def closest_WOA_points_bfs(grid,baths,bedmach,debug=False):
+def closest_shelfbreak_points_bfs(grid,baths,bedmach,debug=False):
     print("bfs")
     bedvalues = bedmach.bed.values
     icemask = bedmach.icemask_grounded_and_shelves.values
@@ -321,7 +321,7 @@ def averageForShelf(soi,bedmap,grid,physical,baths,closest_hydro,sal,temp,shelve
     avg_s = np.mean(avg_s,axis=0)
     return avg_s,avg_t,d
         
-def revampedClosest(bedmap,grid,physical,baths,closest_hydro,sal,temp,shelves,debug=False,quant="glibheat",shelfkeys=None,timestep=0):
+def parameterization_quantities(bedmap,grid,physical,baths,closest_hydro,sal,temp,shelves,debug=False,quant="glibheat",shelfkeys=None,timestep=0):
     heats=np.empty((sal.s_an.shape[0],len(physical)))
     cdws=np.empty((sal.s_an.shape[0],len(physical)))
     gprimes=np.empty((sal.s_an.shape[0],len(physical)))
