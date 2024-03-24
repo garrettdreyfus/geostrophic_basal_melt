@@ -1,8 +1,11 @@
 import xarray as xr
 import pyproj
+import gsw
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib
+from matplotlib import gridspec
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from tqdm import tqdm
 import pickle
@@ -12,6 +15,9 @@ from matplotlib.patches import Rectangle
 import matplotlib as mpl
 import rasterio
 from scipy.ndimage import label
+from scipy import interpolate
+from sklearn.linear_model import LinearRegression
+from cdw import pycnocline
 
 def grab_bottom(t,max_depth=500):
     tvalues = t.t_an.values
@@ -419,3 +425,78 @@ def closestMethodologyFig(bedmap,grid,physical,baths,closest_points,sal,temp,she
     plt.tight_layout()
 
     plt.show()
+
+
+def param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=30,ylim=30,colorthresh=5,textthresh=5):
+    melts = np.asarray(cdws*np.asarray(thermals)*np.asarray(gprimes)*np.asarray(slopes)*np.asarray(fs))
+    mys=np.asarray(mys)
+    xs = np.asarray(([melts])).reshape((-1, 1))
+    model = LinearRegression().fit(xs, mys)
+    r2 = model.score(xs,mys)
+    rho0 = 1025
+    rhoi = 910
+    Cp = 4186
+    If = 334000
+    C = model.coef_
+    W0 =  100000
+    alpha =  (C/((rho0*Cp)/(rhoi*If*W0)))/(364*24*60*60)
+    print('alpha: ', alpha)
+    plt.rc('axes', titlesize=24)     # fontsize of the axes title
+    xs = np.asarray(([melts])).reshape((-1, 1))
+    model = LinearRegression().fit(xs, mys)
+    r2 = model.score(xs,mys)
+    melts = model.predict(xs)
+    ax = plt.gca()
+    ax.scatter(melts[melts<colorthresh],mys[melts<colorthresh],c="blue")
+    ax.scatter(melts[melts>colorthresh],mys[melts>colorthresh],c="red")
+    markers, caps, bars = ax.errorbar(melts,mys,yerr=sigmas,ls='none')
+    [bar.set_alpha(0.5) for bar in bars]
+    ax.set_xlim(0,xlim)
+    ax.set_ylim(0,ylim)
+    plt.xticks(fontsize=14)
+    plt.yticks(fontsize=14)
+    for k in range(len(labels)):
+        if melts[k]>textthresh:
+            text=plt.annotate(labels[k],(melts[k],mys[k]))
+    ax.plot(range(30),range(30))
+    ax.text(.05, .95, '$r^2=$'+str(round(r2,2)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
+    ax.set_xlabel(r"$\dot{m}_{\mathrm{pred}} (m/yr)$",fontsize=18)
+    ax.set_ylabel(r'$\dot{m}_{\mathrm{obs}} (m/yr)$',fontsize=18)
+    plt.show()
+
+
+def hydro_vs_slope_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,nozone=(1500,0.005),xlim="max",ylim="max"):
+    melts = np.asarray(cdws*np.asarray(thermals)*np.asarray(gprimes)*np.asarray(slopes)*np.asarray(fs))
+    mys=np.asarray(mys)
+    xs = np.asarray(([melts])).reshape((-1, 1))
+    model = LinearRegression().fit(xs, mys)
+    tempterms = cdws*np.asarray(thermals)*np.asarray(fs)*np.asarray(gprimes)
+    if xlim == "max":
+        x = np.linspace(np.min(tempterms)*0.95,np.max(tempterms)*1.05,100)
+        y = np.linspace(0,np.max(slopes)*1.05,100)
+        X,Y = np.meshgrid(x,y)
+        Z = np.multiply(X,Y)*model.coef_[0]+model.intercept_
+        im = plt.pcolormesh(X,Y,Z,cmap="gnuplot",vmin=np.min(Z),vmax=33)
+    else:
+        x = np.linspace(np.min(tempterms)*0.95,xlim,100)
+        y = np.linspace(0,ylim,100)
+        plt.xlim((np.min(tempterms)*0.95,xlim))
+        plt.ylim((0,ylim))
+        X,Y = np.meshgrid(x,y)
+        Z = np.multiply(X,Y)*model.coef_[0]+model.intercept_
+        im = plt.pcolormesh(X,Y,Z,cmap="gnuplot",vmin=np.min(Z),vmax=4)
+    cbar = plt.colorbar(im)
+    CS = plt.contour(X,Y,Z,levels=[1,2.5,5,10,15,20],colors="white")
+    plt.clabel(CS, CS.levels, inline=True, fontsize=10)
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
+    plt.xlabel(r"Hydrographic terms $(C m^{2} s^{-1})$",fontsize=24)
+    plt.ylabel(r'Ice shelf slope $(m^{-1})$',fontsize=24)
+    plt.locator_params(axis='y', nbins=4)
+    plt.locator_params(axis='x', nbins=4)
+    plt.scatter(tempterms,slopes,c="white")
+    for k in range(len(labels)):
+        if tempterms[k]>nozone[0] or slopes[k]>nozone[1]:
+            plt.annotate(labels[k],(tempterms[k],slopes[k]),c="white",fontsize=14)
+    plt.show()
+
