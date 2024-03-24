@@ -1,6 +1,6 @@
 import bathtub as bt
 import pickle
-import GLIB
+import HUB
 import gsw,xarray, pyproj
 import matplotlib.pyplot as plt
 import numpy as np
@@ -9,11 +9,11 @@ import matplotlib.colors as colors
 import paperfigures as pf
 import cdw
 
-# Create GLIB
+# Create HUB
 
 writeBedMach = False
 writeShelfNumbers = False
-writeGLIB = False
+writeHUB = False
 writePolygons = False
 writeGL =False
 createWOA = True
@@ -40,16 +40,17 @@ icemask = bedmach.icemask_grounded_and_shelves.values
 ##################################################
 
 ##################################################
-if writeGLIB:
-    print("Calculating Glibs")
-    GLIB = GLIB.generateGLIBs(bedvalues,icemask)
+if writeHUB:
 
-    with open("data/bedmachGLIB.pickle","wb") as f:
-        pickle.dump(GLIB,f)
+    print("Calculating Hubs")
+    HUB = HUB.generateHUBs(bedvalues,icemask)
+
+    with open("data/bedmachHUB.pickle","wb") as f:
+        pickle.dump(HUB,f)
 
 
-with open("data/bedmachGLIB.pickle","rb") as f:
-    GLIB = pickle.load(f)
+with open("data/bedmachHUB.pickle","rb") as f:
+    HUB = pickle.load(f)
 
 ##################################################
 
@@ -92,7 +93,7 @@ with open("data/groundinglinepoints.pickle","rb") as f:
 
 baths = []
 for l in range(len(grid)):
-    baths.append(GLIB[grid[l][0]][grid[l][1]])
+    baths.append(HUB[grid[l][0]][grid[l][1]])
 
 ################################################
 
@@ -124,10 +125,10 @@ with open("data/closest_points.pickle","rb") as f:
     closest_points = pickle.load(f)
 
 depths = []
-glibs = []
+hubs = []
 for l in range(len(baths)):
     depths.append(bedvalues[grid[l][0],grid[l][1]])
-    glibs.append(baths[l])
+    hubs.append(baths[l])
     if np.isnan(baths[l]):
         baths[l]=bedvalues[grid[l][0],grid[l][1]]
         
@@ -138,23 +139,23 @@ for l in range(len(baths)):
 with open("data/closest_hydro_woathree.pickle","rb") as f:
     closest_hydro = pickle.load(f)
 
-#avg_s,avg_t,depths = cdw.averageForShelf("Thwaites",bedmach,grid,physical,glibs,closest_hydro,sal,temp,shelf_keys,quant="glibheat",debug=False)
+#avg_s,avg_t,depths = cdw.averageForShelf("Thwaites",bedmach,grid,physical,hubs,closest_hydro,sal,temp,shelf_keys,quant="hubheat",debug=False)
 #with open("data/ThwaitesAverages.pickle","wb") as f:
     #pickle.dump((avg_t,avg_s,depths),f)
 
 
 #shelf_areas = bt.shelf_areas()
-#glibheats,cdwdepths,gprimes = cdw.revampedClosest(bedmach,grid,physical,glibs,closest_hydro,sal,temp,shelf_keys,quant="glibheat",debug=False)
+#hubheats,cdwdepths,gprimes = cdw.revampedClosest(bedmach,grid,physical,hubs,closest_hydro,sal,temp,shelf_keys,quant="hubheat",debug=False)
 physical = np.asarray(physical)
 grid = np.asarray(grid)
 
 #with open("data/stats_woa.pickle","wb") as f:
-    #pickle.dump((glibheats,cdwdepths,gprimes),f)
+    #pickle.dump((hubheats,cdwdepths,gprimes),f)
 with open("data/stats_woa.pickle","rb") as f:
-    (glibheats,cdwdepths,gprimes) = pickle.load(f)
+    (hubheats,cdwdepths,gprimes) = pickle.load(f)
 
-#with open("data/glibheats_gissr2.pickle","rb") as f:
-    #glibheats = pickle.load(f)
+#with open("data/hubheats_gissr2.pickle","rb") as f:
+    #hubheats = pickle.load(f)
 #with open("data/cdwdepths_gissr2.pickle","rb") as f:
     #cdwdepths = pickle.load(f)
 #with open("data/gprimes_gissr2.pickle","rb") as f:
@@ -175,18 +176,18 @@ for x,y in physical:
 
 #polynas=np.asarray(polynas)
 fs_by_shelf = bt.shelf_sort(shelf_keys,fs)
-hubheats_by_shelf = bt.shelf_sort(shelf_keys,glibheats)
+hubheats_by_shelf = bt.shelf_sort(shelf_keys,hubheats)
 cdws_by_shelf = bt.shelf_sort(shelf_keys,cdwdepths)
 gprimes_by_shelf = bt.shelf_sort(shelf_keys,gprimes)
 gldepths_by_shelf = bt.shelf_sort(shelf_keys,depths)
-glibs_by_shelf = bt.shelf_sort(shelf_keys,glibs)
+hubs_by_shelf = bt.shelf_sort(shelf_keys,hubs)
 rignot_shelf_massloss,shelf_areas,sigmas_by_shelf =  cdw.extract_adusumilli("data/Adusumilli.csv")
 
 
 thermals=[]
 cdws = []
 gldepths = []
-glibshelf=[]
+hubshelf=[]
 gprimes=[]
 bars = []
 areas = []
@@ -206,7 +207,7 @@ for k in slopes_by_shelf.keys():
         cdws.append(np.nanmean(cdws_by_shelf[k],axis=0))
         gldepths.append(np.nanmean(gldepths_by_shelf[k]))
         gprimes.append(np.nanmean(gprimes_by_shelf[k],axis=0))
-        glibshelf.append(np.nanmean(glibs_by_shelf[k]))
+        hubshelf.append(np.nanmean(hubs_by_shelf[k]))
         if k == "Amery":
             sigmas.append(0.7)
             areas.append(list([60228])*np.shape(hubheats_by_shelf[k])[1])
@@ -219,7 +220,7 @@ for k in slopes_by_shelf.keys():
 
 areas = np.asarray(areas)
 slopes = np.asarray(slopes)
-glibshelf = np.asarray(glibshelf)
+hubshelf = np.asarray(hubshelf)
 cdws = np.asarray(cdws)
 pf.closestMethodologyFig(bedmach,grid,physical,baths,closest_points,sal,temp,shelves)
 pf.hydro_vs_slope_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels)
