@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib import gridspec
+import matplotlib as mpl
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 from tqdm import tqdm
 import pickle
@@ -216,6 +217,7 @@ def overview_figure(downscale=2):
     #plt.show()
 
 def hub_schematic_figure():
+    mpl.rcParams['savefig.dpi'] = 500
     with open("data/bedmach.pickle","rb") as f:
         bedmach = pickle.load(f)
     icemask = bedmach.icemask_grounded_and_shelves.values[3400:6500,3400:6000-300]
@@ -242,21 +244,36 @@ def hub_schematic_figure():
 
     mapins = inset_axes(ax, width="30%", height="30%", loc='lower left',
                    bbox_to_anchor=(0,0,1,1), bbox_transform=ax.transAxes)
-    mapins.add_patch(Rectangle((3400,3400),2300,3100,facecolor='red',alpha=0.5))
+    mapins.add_patch(Rectangle((3400-1100,3400-2000),2300,3100,facecolor='red',alpha=0.5))
 
 
     coarsefull = bedmach.icemask_grounded_and_shelves.values
     coarsefull[coarsefull==1]=np.nan
-    mapins.imshow(coarsefull)
+    mapins.imshow(coarsefull[2000:-2000,1100:-1100])
     mapins.set_xticks([],[])
     mapins.set_yticks([],[])
 
     mpl.rcParams['axes.linewidth'] =5
-    axins = ax.inset_axes([0.025, 0.5, 0.45, 0.45])
+    axins = ax.inset_axes([0.025, 0.5, 0.45, 0.45],zorder=12)
     axins.spines['bottom'].set_color('white')
     axins.spines['top'].set_color('white')
     axins.spines['right'].set_color('white')
     axins.spines['left'].set_color('white')
+
+    source_crs = 'epsg:3031' # Coordinate system of the file
+    target_crs = 'epsg:4326' # Global lat-lon coordinate system
+    converter = pyproj.Transformer.from_crs(source_crs, target_crs)
+    X,Y=np.meshgrid(bedmach.coords["x"].values,bedmach.coords["y"].values)
+    Xcrop,Ycrop = X[3400:6500,3400:6000-300],Y[3400:6500,3400:6000-300]
+    lats,lons = converter.transform(Xcrop,Ycrop)
+    Xi,Yi = np.meshgrid(range(np.shape(Xcrop)[1]),range(np.shape(Xcrop)[0]))
+    CS = ax.contour(Xi,Yi[::-1,:],lats,4,colors="white",zorder=10)
+    ax.clabel(CS, CS.levels, inline=True, fmt=latfmt, fontsize=16)
+    CS = ax.contour(Xi,Yi[::-1,:],lons,4,colors="white", zorder=10)
+    ax.clabel(CS, CS.levels, inline=True, fmt=lonfmt, fontsize=16)
+    #ax.clabel(CS, CS.levels, inline=True, fontsize=16)
+ 
+
     ax.imshow(icemask,zorder=5,origin="lower",cmap="Greys_r",vmin=-0.5,vmax=1)
     axins.set_xticklabels([])
     axins.set_xticks([],[])
@@ -276,6 +293,23 @@ def hub_schematic_figure():
     plt.show()
 #hub_schematic_figure()
 #overview_figure(downscale=2)
+
+def latfmt(x):
+    s = f"{x:.1f}"
+    if s.endswith("0"):
+        s = f"{x:.0f}"
+    if x>0:
+        return f"{s} $^\circ$N"
+    if x<0:
+        return f"{s} $^\circ$S"
+def lonfmt(x):
+    s = f"{x:.1f}"
+    if s.endswith("0"):
+        s = f"{x:.0f}"
+    if x>0:
+        return f"{s} $^\circ$E"
+    if x<0:
+        return f"{s} $^\circ$W"
 
 def closestMethodologyFig(bedmap,grid,physical,baths,closest_points,sal,temp,shelves,debug=False,quant="glibheat",shelfkeys=None,point_i=55900):
     plt.figure(figsize=(18,5))
@@ -453,19 +487,20 @@ def param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=30,
     [bar.set_alpha(0.5) for bar in bars]
     ax.set_xlim(0,xlim)
     ax.set_ylim(0,ylim)
-    plt.xticks(fontsize=14)
-    plt.yticks(fontsize=14)
+    plt.xticks(fontsize=18)
+    plt.yticks(fontsize=18)
     for k in range(len(labels)):
         if melts[k]>textthresh:
             text=plt.annotate(labels[k],(melts[k],mys[k]))
     ax.plot(range(30),range(30))
     ax.text(.05, .95, '$r^2=$'+str(round(r2,2)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
-    ax.set_xlabel(r"$\dot{m}_{\mathrm{pred}} (m/yr)$",fontsize=18)
-    ax.set_ylabel(r'$\dot{m}_{\mathrm{obs}} (m/yr)$',fontsize=18)
+    ax.set_xlabel(r"$\dot{m}_{\mathrm{pred}} (m/yr)$",fontsize=24)
+    ax.set_ylabel(r'$\dot{m}_{\mathrm{obs}} (m/yr)$',fontsize=24)
     plt.show()
 
 
 def hydro_vs_slope_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,nozone=(1500,0.005),xlim="max",ylim="max"):
+    mpl.rcParams['savefig.dpi'] = 500
     melts = np.asarray(cdws*np.asarray(thermals)*np.asarray(gprimes)*np.asarray(slopes)*np.asarray(fs))
     mys=np.asarray(mys)
     xs = np.asarray(([melts])).reshape((-1, 1))
@@ -485,7 +520,9 @@ def hydro_vs_slope_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,nozone=
         X,Y = np.meshgrid(x,y)
         Z = np.multiply(X,Y)*model.coef_[0]+model.intercept_
         im = plt.pcolormesh(X,Y,Z,cmap="gnuplot",vmin=np.min(Z),vmax=4)
-    cbar = plt.colorbar(im)
+    cb = plt.colorbar(im)
+    for t in cb.ax.get_yticklabels():
+        t.set_fontsize(18)
     CS = plt.contour(X,Y,Z,levels=[1,2.5,5,10,15,20],colors="white")
     plt.clabel(CS, CS.levels, inline=True, fontsize=10)
     plt.xticks(fontsize=16)

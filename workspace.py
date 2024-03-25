@@ -19,8 +19,8 @@ createWOA = False
 createGISS = False
 createClosestShelfPoints = False
 createClosestHydro = False
-createQuants = True
-createSlopes = True
+createQuants = False
+createSlopes = False
 
 ##################################################
 #Create Polygon objects from MEASURES files
@@ -139,12 +139,11 @@ with open("data/stats_woa.pickle","rb") as f:
     (hubheats,cdwdepths,gprimes) = pickle.load(f)
 
 if createSlopes:
-    # slopes_by_shelf = cdw.slope_by_shelf(bedmach,polygons)
-    # with open("data/slopes_by_shelf.pickle","wb") as f:
-    #     pickle.dump(slopes_by_shelf,f)
-    with open("data/slopes_by_shelf.pickle","rb") as f:
-        slopes_by_shelf = pickle.load(f)
-
+    slopes_by_shelf = cdw.slope_by_shelf(bedmach,polygons)
+    with open("data/slopes_by_shelf.pickle","wb") as f:
+        pickle.dump(slopes_by_shelf,f)
+with open("data/slopes_by_shelf.pickle","rb") as f:
+    slopes_by_shelf = pickle.load(f)
 #calculate 1/f
 print("hello")
 projection = pyproj.Proj("epsg:3031")
@@ -200,11 +199,13 @@ areas = np.asarray(areas)
 slopes = np.asarray(slopes)
 hubshelf = np.asarray(hubshelf)
 cdws = np.asarray(cdws)
-pf.closestMethodologyFig(bedmach,grid,physical,hubs,closest_points,sal,temp,shelves)
+#pf.hub_schematic_figure()
+#exit()
+#pf.closestMethodologyFig(bedmach,grid,physical,hubs,closest_points,sal,temp,shelves)
 pf.hydro_vs_slope_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels)
-pf.hydro_vs_slope_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=1500,ylim=0.005,nozone=(-1000,-1000))
-pf.param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=5,ylim=5,textthresh=0,colorthresh=5)
-pf.param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels)
+#pf.hydro_vs_slope_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=1500,ylim=0.005,nozone=(-1000,-1000))
+#pf.param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels)
+#pf.param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=5,ylim=5,textthresh=0,colorthresh=5)
 exit()
 
 
