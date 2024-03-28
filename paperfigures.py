@@ -8,6 +8,7 @@ import matplotlib
 from matplotlib import gridspec
 import matplotlib as mpl
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from adjustText import adjust_text
 from tqdm import tqdm
 import pickle
 import rioxarray as riox
@@ -228,7 +229,7 @@ def hub_schematic_figure():
     bedvalues = bedmach.bed.values[3400:6500,3400:6000-300]
     bedvalues = bedvalues[::-1,:]
 
-    fig, ax = plt.subplots(1,1)
+    fig, ax = plt.subplots(1,1,figsize=(16,18))
 
 
     newcmap = cmocean.tools.crop(cmocean.cm.topo, -2500, 0, 0)
@@ -267,10 +268,13 @@ def hub_schematic_figure():
     Xcrop,Ycrop = X[3400:6500,3400:6000-300],Y[3400:6500,3400:6000-300]
     lats,lons = converter.transform(Xcrop,Ycrop)
     Xi,Yi = np.meshgrid(range(np.shape(Xcrop)[1]),range(np.shape(Xcrop)[0]))
-    CS = ax.contour(Xi,Yi[::-1,:],lats,4,colors="white",zorder=10)
-    ax.clabel(CS, CS.levels, inline=True, fmt=latfmt, fontsize=16)
     CS = ax.contour(Xi,Yi[::-1,:],lons,4,colors="white", zorder=10)
-    ax.clabel(CS, CS.levels, inline=True, fmt=lonfmt, fontsize=16)
+    labels = ax.clabel(CS, CS.levels, inline=True, fmt=lonfmt, fontsize=16,manual=((1385.1508131411074, 336.9720182371744),(1543.1243307655654, 827.702774790029),(1858.143481797842, 1240.8565182021584)))
+    CS = ax.contour(Xi,Yi[::-1,:],lats,5,colors="white",zorder=10)
+
+    labels = ax.clabel(CS, CS.levels, inline=True, fmt=latfmt, fontsize=16,manual=((2077.4624486356074, 1391.0308273369785),(1648.2511185370836, 1889.8855571474253),(1295.6808102840082, 2452.214393506218)))
+    for i in labels:
+        print(i)
     #ax.clabel(CS, CS.levels, inline=True, fontsize=16)
  
 
@@ -463,6 +467,7 @@ def closestMethodologyFig(bedmap,grid,physical,baths,closest_points,sal,temp,she
 
 def param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=30,ylim=30,colorthresh=5,textthresh=5):
     melts = np.asarray(cdws*np.asarray(thermals)*np.asarray(gprimes)*np.asarray(slopes)*np.asarray(fs))
+    #melts = np.asarray(slopes)
     mys=np.asarray(mys)
     xs = np.asarray(([melts])).reshape((-1, 1))
     model = LinearRegression().fit(xs, mys)
@@ -489,9 +494,12 @@ def param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=30,
     ax.set_ylim(0,ylim)
     plt.xticks(fontsize=18)
     plt.yticks(fontsize=18)
+    texts = []
     for k in range(len(labels)):
         if melts[k]>textthresh:
             text=plt.annotate(labels[k],(melts[k],mys[k]))
+            texts.append(text)
+    #adjust_text(texts)
     ax.plot(range(30),range(30))
     ax.text(.05, .95, '$r^2=$'+str(round(r2,2)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
     ax.set_xlabel(r"$\dot{m}_{\mathrm{pred}} (m/yr)$",fontsize=24)
@@ -535,5 +543,32 @@ def hydro_vs_slope_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,nozone=
     for k in range(len(labels)):
         if tempterms[k]>nozone[0] or slopes[k]>nozone[1]:
             plt.annotate(labels[k],(tempterms[k],slopes[k]),c="white",fontsize=14)
+    plt.show()
+
+def singleparam_vs_melt_fig(quant,mys,sigmas,labels,xlabel):
+    melts = np.asarray(quant)
+    mys=np.asarray(mys)
+    xs = np.asarray(([melts])).reshape((-1, 1))
+    model = LinearRegression().fit(xs, mys)
+    r2 = model.score(xs,mys)
+    plt.rc('axes', titlesize=24)     # fontsize of the axes title
+    xs = np.asarray(([melts])).reshape((-1, 1))
+    model = LinearRegression().fit(xs, mys)
+    r2 = model.score(xs,mys)
+    melts = model.predict(xs)
+    ax = plt.gca()
+    ax.scatter(quant,mys,c="blue")
+    markers, caps, bars = ax.errorbar(quant,mys,yerr=sigmas,ls='none')
+    [bar.set_alpha(0.5) for bar in bars]
+    plt.xticks(fontsize=18)
+    plt.yticks(fontsize=18)
+    texts = []
+    for k in range(len(labels)):
+        text=plt.annotate(labels[k],(quant[k],mys[k]))
+        texts.append(text)
+    #adjust_text(texts)
+    ax.text(.05, .95, '$r^2=$'+str(round(r2,2)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
+    ax.set_xlabel(xlabel,fontsize=24)
+    ax.set_ylabel(r'$\dot{m}_{\mathrm{obs}} (m/yr)$',fontsize=24)
     plt.show()
 
