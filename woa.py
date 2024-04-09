@@ -121,16 +121,20 @@ def create_MIMOC(bed,debug = False):
    temp.icemask.values[temp.icemask.values<1]=0
    return sal,temp
 
-def create_GISS(bed,debug = False):
+def create_GISS(bed,ens_memb=1,debug = False):
    bedmap = bed
-   salfname,tempfname = "data/so_Omon_GISS-E2-1-G_historical_r201i1p1f2_gn_199001-200912.nc","data/thetao_Omon_GISS-E2-1-G_historical_r201i1p1f2_gn_199001-200912.nc"
+   salfname,tempfname = f"data/so_Omon_GISS-E2-1-G_historical_r2{ens_memb:02d}i1p1f4_gn_199001-200912.nc",f"data/thetao_Omon_GISS-E2-1-G_historical_r2{ens_memb:02d}i1p1f4_gn_199001-200912.nc"
    #salfname,tempfname = "data/woa18_decav_s15_04.nc","data/woa18_decav_t15_04.nc"
    sal = xarray.open_dataset(salfname,decode_times=False)
    temp = xarray.open_dataset(tempfname,decode_times=False)
+   #sal = sal.transpose("lat","bnds","lon","lev","time")
+   #temp = temp.transpose("lat","bnds","lon","lev","time")
    sal = sal.where(sal.lat<-60,drop=True)
    temp= temp.where(sal.lat<-60,drop=True)
    sal["s_an"] = sal.so
    temp["t_an"] = temp.thetao
+   #temp["t_an"] = temp.t_an.transpose("time","lev","lat","lon")
+   #sal["s_an"] = sal.s_an.transpose("time","lev","lat","lon")
    sal["depth"] = sal.lev
    temp["depth"] = temp.lev
    lons=sal.lon.values
