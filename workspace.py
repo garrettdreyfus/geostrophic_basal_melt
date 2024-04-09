@@ -8,6 +8,7 @@ import woa
 import matplotlib.colors as colors
 import paperfigures as pf
 import cdw
+import cProfile
 
 #These flags just make it easy to turn off and steps of the analysis 
 writeBedMach = False
@@ -132,7 +133,6 @@ with open("data/closest_hydro_woathree.pickle","rb") as f:
 ################################################
 if createQuants:
     hubheats,cdwdepths,gprimes = cdw.parameterization_quantities(bedmach,grid,physical,hubs,closest_hydro,sal,temp,shelf_keys,quant="hubheat",debug=False)
-
     with open("data/stats_woa.pickle","wb") as f:
         pickle.dump((hubheats,cdwdepths,gprimes),f)
 with open("data/stats_woa.pickle","rb") as f:
