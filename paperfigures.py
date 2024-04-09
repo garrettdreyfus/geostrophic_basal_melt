@@ -3,6 +3,7 @@ import pyproj
 import gsw
 import h5py
 import numpy as np
+from woa import create_GISS
 import matplotlib.pyplot as plt
 import matplotlib
 from matplotlib import gridspec
@@ -48,7 +49,7 @@ def overview_figure(downscale=2):
     temp = temp.where(temp.lat<-60,drop=True)
     temp = temp.isel(time=0,drop=True)
     B = grab_bottom(temp)
-    temp = temp.sel(depth=500,drop=True)
+    temp = temp.sel(depth=600,drop=True)
     temp.t_an.values = B
 
     temp = temp.rename({"lat":"y","lon":"x"})
@@ -464,8 +465,82 @@ def closestMethodologyFig(bedmap,grid,physical,baths,closest_points,sal,temp,she
 
     plt.show()
 
+def masslossparam(cdws,thermals,gprimes,slopes,fs,areas,walpha=0.01076063,calpha=5.40704584):
+    rho0 = 1025
+    rhoi = 910
+    Cp = 4186
+    If = 334000
 
-def param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=30,ylim=30,colorthresh=5,textthresh=5):
+    W0 =  100000
+    icedens = 917
+    gigatonconv = 10**(-12)
+    thresh = 4
+
+    icedens = 917
+    gigatonconv = 10**(-12)
+    scalefactor = icedens*gigatonconv*10**6
+
+    scalefactor = icedens*gigatonconv*10**6
+    warmC = (((rho0*Cp*walpha)/(rhoi*If*W0)))*(364*24*60*60)
+    coldC = (((rho0*Cp*calpha)/(rhoi*If*W0)))*(364*24*60*60)
+    melts = np.asarray(cdws*np.asarray(thermals)*np.asarray(gprimes)*np.asarray(slopes)*np.asarray(fs))*warmC
+    cmask = melts<thresh
+    wmask = ~cmask
+    melts[wmask] = melts[wmask]*areas[wmask]
+    melts[cmask] = slopes[cmask]*areas[cmask]*coldC
+    return melts
+
+
+def param_vs_massloss_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=30,ylim=30,colorthresh=5,textthresh=5,title=""):
+    melts = np.asarray(cdws*np.asarray(thermals)*np.asarray(gprimes)*np.asarray(slopes)*np.asarray(fs))
+    mys=np.asarray(mys)
+    xs = np.asarray(([melts])).reshape((-1, 1))
+    model = LinearRegression().fit(xs, mys)
+    r2 = model.score(xs,mys)
+    warmC = model.coef_
+    rho0 = 1025
+    rhoi = 910
+    Cp = 4186
+    If = 334000
+    C = model.coef_
+    W0 =  100000
+    cmask=melts<colorthresh
+    wmask=melts>=colorthresh
+    alpha =  (C/((rho0*Cp)/(rhoi*If*W0)))/(364*24*60*60)
+    print('alpha: ', alpha)
+    plt.rc('axes', titlesize=24)     # fontsize of the axes title
+    xs = np.asarray(([melts])).reshape((-1, 1))
+    model = LinearRegression().fit(xs, mys)
+    r2 = model.score(xs,mys)
+    melts = model.predict(xs)
+    ax = plt.gca()
+    ax.scatter(melts[cmask],mys[cmask],c="blue")
+    ax.scatter(melts[wmask],mys[wmask],c="red")
+    markers, caps, bars = ax.errorbar(melts,mys,yerr=sigmas,ls='none')
+    [bar.set_alpha(0.5) for bar in bars]
+    ax.set_xlim(0,xlim)
+    ax.set_ylim(0,ylim)
+    plt.xticks(fontsize=18)
+    plt.yticks(fontsize=18)
+    texts = []
+    for k in range(len(labels)):
+        if melts[k]>textthresh:
+            text=plt.annotate(labels[k],(melts[k],mys[k]))
+            texts.append(text)
+    #adjust_text(texts)
+    ax.plot(range(30),range(30))
+    ax.text(.05, .95, '$r^2=$'+str(round(r2,2)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
+    ax.text(.05, .90, '$α=$'+str(round(alpha[0],3)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
+    ax.set_xlabel(r"$\dot{m}_{\mathrm{pred}} (m/yr)$",fontsize=24)
+    ax.set_ylabel(r'$\dot{m}_{\mathrm{obs}} (m/yr)$',fontsize=24)
+    plt.title(title)
+    plt.savefig("pics/ens"+str(title)+".png")
+    plt.close()
+    #plt.show()
+
+
+
+def param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=30,ylim=30,colorthresh=5,textthresh=5,title=""):
     melts = np.asarray(cdws*np.asarray(thermals)*np.asarray(gprimes)*np.asarray(slopes)*np.asarray(fs))
     #melts = np.asarray(slopes)
     mys=np.asarray(mys)
@@ -486,8 +561,8 @@ def param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=30,
     r2 = model.score(xs,mys)
     melts = model.predict(xs)
     ax = plt.gca()
-    ax.scatter(melts[melts<colorthresh],mys[melts<colorthresh],c="blue")
-    ax.scatter(melts[melts>colorthresh],mys[melts>colorthresh],c="red")
+    ax.scatter(melts[melts<colorthresh],mys[melts<colorthresh],c=slopes[melts<colorthresh])
+    ax.scatter(melts[melts>colorthresh],mys[melts>colorthresh],c=slopes[melts>colorthresh])
     markers, caps, bars = ax.errorbar(melts,mys,yerr=sigmas,ls='none')
     [bar.set_alpha(0.5) for bar in bars]
     ax.set_xlim(0,xlim)
@@ -502,9 +577,13 @@ def param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=30,
     #adjust_text(texts)
     ax.plot(range(30),range(30))
     ax.text(.05, .95, '$r^2=$'+str(round(r2,2)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
+    ax.text(.05, .90, '$α=$'+str(round(alpha[0],3)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
     ax.set_xlabel(r"$\dot{m}_{\mathrm{pred}} (m/yr)$",fontsize=24)
     ax.set_ylabel(r'$\dot{m}_{\mathrm{obs}} (m/yr)$',fontsize=24)
-    plt.show()
+    plt.title(title)
+    plt.savefig("pics/ens"+str(title)+".png")
+    plt.close()
+    #plt.show()
 
 
 def hydro_vs_slope_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,nozone=(1500,0.005),xlim="max",ylim="max"):
