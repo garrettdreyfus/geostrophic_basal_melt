@@ -10,7 +10,6 @@ from matplotlib.patches import Rectangle
 import gsw,xarray, pyproj
 from bathtub import closest_shelf
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from scipy import interpolate
 import pandas as pd
 from copy import copy
 from matplotlib import collections  as mc
@@ -25,43 +24,31 @@ import rasterio
 def moving_average(x, w):
     return np.convolve(x, np.ones(w), 'valid') / w
 
-def gprime(heat_function,hub,shelf_key=None,lat=None,lon=None,debug=False):
+def gprime(si,ti,zi,hub,shelf_key=None,lat=None,lon=None,debug=False):
     hub = np.abs(hub)
-    zi = np.arange(5,1500,1)
-    ti = heat_function[0](zi)
-    si = heat_function[1](zi)
     di = gsw.rho(si,ti,zi)
 
     di = moving_average(di,50)
-    zi = moving_average(zi,50)
-    ti = moving_average(ti,50)
     si = moving_average(si,50)
+    ti = moving_average(ti,50)
+    zi = moving_average(zi,50)
 
     dizi = np.abs(np.diff(di)/np.diff(zi))
     thresh = np.quantile(dizi,0.85)
     zpyc = np.mean(zi[1:][dizi>thresh])
     zpyci = np.argmin(np.abs(zi-zpyc))
+
     di = gsw.rho(si,ti,zpyc)
 
     rho_1i = np.logical_and(zi<zi[zpyci],zi>zi[zpyci]-50)
     rho_2i = np.logical_and(zi<zi[zpyci]+50,zi>zi[zpyci])
+
     gprime_ext = 9.8*(np.mean(di[rho_1i])-np.mean(di[rho_2i]))/np.mean(di[np.logical_or(rho_1i,rho_2i)])
 
-    if debug:
-        fig,(ax1,ax2) = plt.subplots(1,2)
-        ax1.plot(di,-zi)
-        ax1.axhline(y=-zpyc,color="red",label="pyc")
-        ax1.axhline(y=-hub,color="blue",label="hub")
-        ax2.axhline(y=-mld,color="green",label="mld")
-        ax2.plot(ti,-zi)
-        ax1.legend()
-        plt.title(str(round(lat,1))+" , "+str(round(lon,1)))
-        plt.show()
-        
     if ~(np.isnan(di).all()):
-        return abs(gprime_ext)
+        return -(zpyc)+hub,abs(gprime_ext)
     else:
-        return np.nan
+        return np.nan,np.nan
 
 def pycnocline(heat_function,hub,shelf_key=None,lat=None,lon=None,debug=False):
     hub = np.abs(hub)
@@ -101,14 +88,18 @@ def pycnocline(heat_function,hub,shelf_key=None,lat=None,lon=None,debug=False):
     else:
         return np.nan
 
-def heat_content(heat_function,depth,plusminus):
+def heat_content(si,ti,zi,depth,plusminus):
     depth = np.abs(depth)
     xnew= np.arange(max(5,depth-plusminus),depth)
+    shallowbound = max(5,depth-plusminus)
+    deepbound = depth
+    mask = np.logical_and(zi>shallowbound,zi<depth)
+    depthrange = zi[mask]
     #xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,1500))
-    ynew = heat_function[0](xnew)
-    ynew = ynew - gsw.CT_freezing(heat_function[1](xnew),xnew,0)
+    ynew = ti[mask]
+    ynew = ynew - gsw.CT_freezing(si[mask],depthrange,0)
     if len(ynew)>0:
-        return np.trapz(ynew,xnew)/len(xnew)
+        return np.trapz(ynew,depthrange)/len(depthrange)
         #return np.max(ynew)
     else:
         return np.nan
@@ -295,27 +286,32 @@ def averageForShelf(soi,bedmap,grid,physical,baths,closest_hydro,sal,temp,shelve
     bedynamic = {}
     avg_t = []
     avg_s = []
+    lons = []
+    lats = []
     for l in tqdm(range(len(closest_hydro))):
-        if soi ==shelves[l]:
+        if soi == shelves[l]:
             val = closest_hydro[l]
-            if ~np.isnan(val):
-                closest=np.unravel_index(int(val), sal.coords["x"].shape)
+            closest=np.unravel_index(int(val), sal.coords["x"].shape)
+            if ~np.isnan(val) and not np.isnan(tempvals[:,:,closest[0],closest[1]]).all():
                 x = stx[closest[0],closest[1]]
                 y = sty[closest[0],closest[1]]
                 lon,lat = projection(x,y,inverse=True)
-                for timestep in range(salvals.shape[0]):
-                    t = tempvals[timestep,:,closest[0],closest[1]]
-                    s = salvals[timestep,:,closest[0],closest[1]]
-                    s = gsw.SA_from_SP(s,d,lon,lat)
-                    #FOR MIMOC MAKE PT
-                    #t = gsw.CT_from_pt(s,t)
-                    t = gsw.CT_from_t(s,t,d)
-                    avg_t.append(t)
-                    avg_s.append(s)
+                lons.append(lon)
+                lats.append(lat)
+                t = np.nanmean(tempvals[:,:,closest[0],closest[1]],axis=0)
+                s = np.nanmean(salvals[:,:,closest[0],closest[1]],axis=0)
+                s = gsw.SA_from_SP(s,d,lon,lat)
+                #FOR MIMOC MAKE PT
+                #t = gsw.CT_from_pt(s,t)
+                t = gsw.CT_from_t(s,t,d)
+                avg_t.append(t)
+                avg_s.append(s)
+
+    print(np.nanmean(lons),np.nanmean(lats))
+    print(set(tuple(sorted([m, n])) for m, n in zip(lons, lats)))
+
     avg_t = np.asarray(avg_t)
     avg_s = np.asarray(avg_s)
-    print(np.shape(avg_t))
-    print(np.shape(avg_s))
 
     avg_t = np.mean(avg_t,axis=0)
     avg_s = np.mean(avg_s,axis=0)
@@ -336,36 +332,29 @@ def parameterization_quantities(bedmap,grid,physical,baths,closest_hydro,sal,tem
     d  = sal.depth.values
     lines = []
     bedvalues = bedmap.bed.values
-    bedynamic = {}
  
-    for l in tqdm(range(len(closest_hydro))):
-        val = closest_hydro[l]
+    for val,bath in tqdm(closest_hydro.keys()):
         if ~np.isnan(val):
             closest=np.unravel_index(int(val), sal.coords["x"].shape)
             x = stx[closest[0],closest[1]]
             y = sty[closest[0],closest[1]]
             lon,lat = projection(x,y,inverse=True)
             for timestep in range(salvals.shape[0]):
-                if (val,timestep,baths[l]) in bedynamic:
-                    heats[timestep,l]=heats[timestep,bedynamic[(val,timestep,baths[l])]]
-                    cdws[timestep,l]=cdws[timestep,bedynamic[(val,timestep,baths[l])]]
-                    gprimes[timestep,l]=gprimes[timestep,bedynamic[(val,timestep,baths[l])]]
-                else:
-                    bedynamic[(val,timestep,baths[l])] = l
-                    t = tempvals[timestep,:,closest[0],closest[1]]
-                    s = salvals[timestep,:,closest[0],closest[1]]
-                    s = gsw.SA_from_SP(s,d,lon,lat)
-                    #FOR MIMOC MAKE PT
-                    #t = gsw.CT_from_pt(s,t)
-                    t = gsw.CT_from_t(s,t,d)
+                t = tempvals[timestep,:,closest[0],closest[1]]
+                s = salvals[timestep,:,closest[0],closest[1]]
+                s = gsw.SA_from_SP(s,d,lon,lat)
+                #FOR MIMOC MAKE PT
+                t = gsw.CT_from_pt(s,t)
+                #t = gsw.CT_from_t(s,t,d)
 
-                    tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
-                    if np.isnan(t[11:]).all():
-                        heats[timestep,l]=np.nan#
-                    elif np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
-                        heats[timestep,l]=heat_content((tinterp,sinterp),baths[l],100)
-                        cdws[timestep,l]=pycnocline((tinterp,sinterp),baths[l],shelf_key=shelves[l],lat=lat,lon=lon)
-                        gprimes[timestep,l]=gprime((tinterp,sinterp),baths[l],shelf_key=shelves[l],lat=lat,lon=lon)
+                zi = np.arange(5,1500,1)
+                ti = np.interp(zi,d,np.asarray(t))
+                si = np.interp(zi,d,np.asarray(s))
+                if np.nanmax(d[~np.isnan(t)])>abs(bath):
+                    deltaH, gprime_ext = gprime(si,ti,zi,bath)
+                    heats[timestep,closest_hydro[(val,bath)]]=heat_content(si,ti,zi,bath,100)
+                    cdws[timestep,closest_hydro[(val,bath)]]= deltaH
+                    gprimes[timestep,closest_hydro[(val,bath)]]=gprime_ext
     return heats,cdws,gprimes
 
 def slope_by_shelf(bedmach,polygons):
@@ -404,12 +393,13 @@ def slope_by_shelf(bedmach,polygons):
             X,Y = np.meshgrid(range(np.shape(clipped)[1]),range(np.shape(clipped)[0]))
             X=X[~np.isnan(clipped)]
             Y=Y[~np.isnan(clipped)]
+            xgrad,ygrad = np.gradient(clipped)
             flatclipped=clipped[~np.isnan(clipped)]
             A = np.vstack([X,Y, np.ones(len(X))]).T
             m1,m2, c = np.linalg.lstsq(A, flatclipped, rcond=None)[0]
             m1=np.abs(m1/500)
             m2=np.abs(m2/500)
-            glib_by_shelf[k] = np.sqrt(m1**2+m2**2)
-    plt.show()
+            #glib_by_shelf[k] = np.sqrt(m1**2+m2**2)
+            glib_by_shelf[k] = np.nanmean(np.sqrt((xgrad/500)**2+(ygrad/500)**2))
 
     return glib_by_shelf
