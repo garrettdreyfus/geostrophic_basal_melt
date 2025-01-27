@@ -19,8 +19,11 @@ from tqdm.contrib.concurrent import process_map
 from scipy import ndimage
 from scipy.ndimage import binary_dilation as bd, label, gaussian_filter 
 from scipy.io import savemat
+from scipy.signal import convolve2d
 import rioxarray as riox
 import rasterio
+import pdb
+from scipy.interpolate import SmoothBivariateSpline as sbs
 
 def moving_average(x, w):
     return np.convolve(x, np.ones(w), 'valid') / w
@@ -52,8 +55,8 @@ def gprime(heat_function,hub,shelf_key=None,lat=None,lon=None,debug=False):
         ax1.plot(di,-zi)
         ax1.axhline(y=-zpyc,color="red",label="pyc")
         ax1.axhline(y=-hub,color="blue",label="hub")
-        ax2.axhline(y=-mld,color="green",label="mld")
-        ax2.plot(ti,-zi)
+        #ax2.axhline(y=-mld,color="green",label="mld")
+        ax2.plot(si,-zi)
         ax1.legend()
         plt.title(str(round(lat,1))+" , "+str(round(lon,1)))
         plt.show()
@@ -106,9 +109,20 @@ def heat_content(heat_function,depth,plusminus):
     xnew= np.arange(max(5,depth-plusminus),depth)
     #xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,1500))
     ynew = heat_function[0](xnew)
-    ynew = ynew - gsw.CT_freezing(heat_function[1](xnew),xnew,0)
+    heat = ynew - gsw.CT_freezing(heat_function[1](xnew),xnew,0)
     if len(ynew)>0:
-        return np.trapz(ynew,xnew)/len(xnew)
+        return np.trapz(ynew,xnew)/len(xnew),np.trapz(heat,xnew)/len(xnew)
+        #return np.max(ynew)
+    else:
+        return np.nan,np.nan
+
+def salt_content(heat_function,depth,plusminus):
+    depth = np.abs(depth)
+    xnew= np.arange(max(5,depth-plusminus),depth)
+    #xnew= np.arange(max(0,depth-plusminus),min(depth+plusminus,1500))
+    salt = heat_function[1](xnew)
+    if len(salt)>0:
+        return np.trapz(salt,xnew)/len(xnew)
         #return np.max(ynew)
     else:
         return np.nan
@@ -323,9 +337,13 @@ def averageForShelf(soi,bedmap,grid,physical,baths,closest_hydro,sal,temp,shelve
         
 def parameterization_quantities(bedmap,grid,physical,baths,closest_hydro,sal,temp,shelves,debug=False,quant="glibheat",shelfkeys=None,timestep=0):
     heats=np.empty((sal.s_an.shape[0],len(physical)))
+    raw_temp=np.empty((sal.s_an.shape[0],len(physical)))
+    salts=np.empty((sal.s_an.shape[0],len(physical)))
     cdws=np.empty((sal.s_an.shape[0],len(physical)))
     gprimes=np.empty((sal.s_an.shape[0],len(physical)))
     heats[:]=np.nan
+    raw_temp[:]=np.nan
+    salts[:]=np.nan
     cdws[:]=np.nan
     gprimes[:]=np.nan
     reshapeval = sal.coords["x"].shape
@@ -347,7 +365,9 @@ def parameterization_quantities(bedmap,grid,physical,baths,closest_hydro,sal,tem
             lon,lat = projection(x,y,inverse=True)
             for timestep in range(salvals.shape[0]):
                 if (val,timestep,baths[l]) in bedynamic:
+                    salts[timestep,l]=salts[timestep,bedynamic[(val,timestep,baths[l])]]
                     heats[timestep,l]=heats[timestep,bedynamic[(val,timestep,baths[l])]]
+                    raw_temp[timestep,l]=raw_temp[timestep,bedynamic[(val,timestep,baths[l])]]
                     cdws[timestep,l]=cdws[timestep,bedynamic[(val,timestep,baths[l])]]
                     gprimes[timestep,l]=gprimes[timestep,bedynamic[(val,timestep,baths[l])]]
                 else:
@@ -358,15 +378,17 @@ def parameterization_quantities(bedmap,grid,physical,baths,closest_hydro,sal,tem
                     #FOR MIMOC MAKE PT
                     #t = gsw.CT_from_pt(s,t)
                     t = gsw.CT_from_t(s,t,d)
-
                     tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
                     if np.isnan(t[11:]).all():
                         heats[timestep,l]=np.nan#
                     elif np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
-                        heats[timestep,l]=heat_content((tinterp,sinterp),baths[l],100)
                         cdws[timestep,l]=pycnocline((tinterp,sinterp),baths[l],shelf_key=shelves[l],lat=lat,lon=lon)
                         gprimes[timestep,l]=gprime((tinterp,sinterp),baths[l],shelf_key=shelves[l],lat=lat,lon=lon)
-    return heats,cdws,gprimes
+                        raw,heat = heat_content((tinterp,sinterp),500,1000)
+                        heats[timestep,l]=heat
+                        raw_temp[timestep,l]=raw
+                        salts[timestep,l]=salt_content((tinterp,sinterp),500,1000)
+    return salts,raw_temp,heats,cdws,gprimes
 
 def slope_by_shelf(bedmach,polygons):
     GLIBmach = bedmach.thickness.copy(deep=True)
@@ -393,6 +415,7 @@ def slope_by_shelf(bedmach,polygons):
         clipped = raster.rio.clip(gons)[0]
         clipped = np.asarray(clipped)
         clipped[clipped<-9000] = np.nan
+        #clipped = convolve2d(clipped, np.ones((10,10))/100)
 
         label_im, nb_labels = label(~np.isnan(clipped))
         sizes = ndimage.sum(~np.isnan(clipped), label_im, range(nb_labels + 1))
@@ -404,12 +427,128 @@ def slope_by_shelf(bedmach,polygons):
             X,Y = np.meshgrid(range(np.shape(clipped)[1]),range(np.shape(clipped)[0]))
             X=X[~np.isnan(clipped)]
             Y=Y[~np.isnan(clipped)]
-            flatclipped=clipped[~np.isnan(clipped)]
-            A = np.vstack([X,Y, np.ones(len(X))]).T
-            m1,m2, c = np.linalg.lstsq(A, flatclipped, rcond=None)[0]
-            m1=np.abs(m1/500)
-            m2=np.abs(m2/500)
-            glib_by_shelf[k] = np.sqrt(m1**2+m2**2)
+            #result = rbf(np.asarray([X,Y]).T,clipped[~np.isnan(clipped)],smoothing=150,neighbors=100)(np.asarray([X,Y]).T)
+            clippedmag = np.nanmax(np.abs(clipped))*max(np.nanmax(X),np.nanmax(Y))
+            if np.sum(~np.isnan(clipped))>7500:
+                clipped[~np.isnan(clipped)] = sbs(X[::2],Y[::2],clipped[~np.isnan(clipped)][::2]/clippedmag,kx=5,ky=5)(X,Y,grid=False)*clippedmag
+            else:
+                clipped[~np.isnan(clipped)] = sbs(X,Y,clipped[~np.isnan(clipped)]/clippedmag,kx=5,ky=5)(X,Y,grid=False)*clippedmag
+            dx = np.diff(clipped,axis=0)[:,:-1]
+            dy = np.diff(clipped,axis=1)[:-1,:]
+                
+            glib_by_shelf[k] = np.nanmean(np.sqrt((dx/500)**2 + (dy/500)**2))
+            #if k == "Nansen":
+                #plt.imshow(clipped)
+                #plt.show()
+            #flatclipped=clipped[~np.isnan(clipped)]
+            #A = np.vstack([X,Y, np.ones(len(X))]).T
+            #m1,m2, c = np.linalg.lstsq(A, flatclipped, rcond=None)[0]
+            #m1=np.abs(m1/500)
+            #m2=np.abs(m2/500)
+            #glib_by_shelf[k] = np.sqrt(m1**2+m2**2)
     plt.show()
 
+    return glib_by_shelf
+
+def extract_drafts(bedmach,polygons):
+    GLIBmach = bedmach.thickness.copy(deep=True)
+    GLIBmach.values[:] = bedmach.surface.values[:]-bedmach.thickness.values[:]
+    GLIBmach.values[np.logical_or(bedmach.icemask_grounded_and_shelves==0,np.isnan(bedmach.icemask_grounded_and_shelves))]=np.nan
+    GLIBmach = GLIBmach.rio.write_crs("epsg:3031")
+    del GLIBmach.attrs['grid_mapping']
+    GLIBmach.rio.to_raster("data/glibmach.tif")
+    
+    xcoord,ycoord = np.meshgrid(bedmach.x.values,bedmach.y.values)
+
+    xmach = bedmach.thickness.copy(deep=True)
+    xmach.values[:] = xcoord
+    xmach = xmach.rio.write_crs("epsg:3031")
+    del xmach.attrs['grid_mapping']
+    xmach.rio.to_raster("data/xmach.tif")
+ 
+    ymach = bedmach.thickness.copy(deep=True)
+    ymach.values[:] = ycoord
+    ymach = ymach.rio.write_crs("epsg:3031")
+    del ymach.attrs['grid_mapping']
+    ymach.rio.to_raster("data/ymach.tif")
+
+
+
+
+
+    glib_by_shelf = {}
+    full_info = {}
+    full_info["shelves"] = {}
+    full_info["coords"] = {}
+    full_info["coords3031"] = {}
+    projection = pyproj.Proj("epsg:3031")
+    for k in tqdm(list(polygons.keys())[:]):
+        raster = riox.open_rasterio('data/glibmach.tif')
+        rasterx = riox.open_rasterio('data/xmach.tif')
+        rastery = riox.open_rasterio('data/ymach.tif')
+        gons = []
+        parts = polygons[k][1]
+        polygon = polygons[k][0]
+        if len(parts)>1:
+            parts.append(-1)
+            for l in range(0,len(parts)-1):
+                poly_path=shapely.geometry.Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T)#.buffer(10**4)
+                gons.append(poly_path)
+        else:
+            gons = [polygon]
+
+        clippedx = rasterx.rio.clip(gons)[0]
+        clippedy = rastery.rio.clip(gons)[0]
+        clipped = raster.rio.clip(gons)[0]
+        clipped = np.asarray(clipped)
+        clippedx = np.asarray(clippedx)
+        clippedy = np.asarray(clippedy)
+        clipped[clipped<-9000] = np.nan
+        #clippedx[clippedx<-9000] = np.nan
+        #clippedy[clippedy<-9000] = np.nan
+
+        X,Y = np.meshgrid(range(np.shape(clipped)[1]),range(np.shape(clipped)[0]))
+        X=X[~np.isnan(clipped)]
+        Y=Y[~np.isnan(clipped)]
+
+        lons,lats = projection(clippedx,clippedy,inverse=True)
+        #full_info[k] = (lons,lats,copy(clipped))
+        full_info["shelves"][k] = copy(clipped)
+        full_info["coords"][k] = (lons,lats) 
+        full_info["coords3031"][k] = (clippedx,clippedy) 
+    savemat("full_info.mat",full_info)
+
+def volumes_by_shelf(bedmach,polygons):
+    GLIBmach = bedmach.bed.copy(deep=True)
+    print(bedmach)
+    GLIBmach.values[:] = -np.abs((bedmach.surface.values[:]-bedmach.thickness.values[:]))+np.abs((bedmach.bed.values))
+    GLIBmach.values[np.logical_or(bedmach.icemask_grounded_and_shelves==0,np.isnan(bedmach.icemask_grounded_and_shelves))]=np.nan
+    GLIBmach = GLIBmach.rio.write_crs("epsg:3031")
+    print(GLIBmach)
+    del GLIBmach.attrs['grid_mapping']
+    GLIBmach.rio.to_raster("data/glibmach.tif")
+
+    glib_by_shelf = {}
+    for k in tqdm(polygons.keys()):
+        raster = riox.open_rasterio('data/glibmach.tif')
+        gons = []
+        parts = polygons[k][1]
+        polygon = polygons[k][0]
+        if len(parts)>1:
+            parts.append(-1)
+            for l in range(0,len(parts)-1):
+                poly_path=shapely.geometry.Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T)#.buffer(10**4)
+                gons.append(poly_path)
+        else:
+            gons = [polygon]
+        print(k)
+        print("made it hearE")
+        clipped = raster.rio.clip(gons)[0]
+        clipped = np.asarray(clipped)
+        clipped[clipped<-9000] = np.nan
+        #grad = np.gradient(clipped)
+        if k == "Filchner" or True:
+            plt.imshow(clipped)
+            plt.show()
+        glib_by_shelf[k] = np.nansum(clipped)
     return glib_by_shelf

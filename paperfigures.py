@@ -20,6 +20,7 @@ from scipy.ndimage import label
 from scipy import interpolate
 from sklearn.linear_model import LinearRegression
 from cdw import pycnocline
+from scipy.stats import pearsonr
 
 def grab_bottom(t,max_depth=500):
     tvalues = t.t_an.values
@@ -465,12 +466,16 @@ def closestMethodologyFig(bedmap,grid,physical,baths,closest_points,sal,temp,she
     plt.show()
 
 
-def param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=30,ylim=30,colorthresh=5,textthresh=5):
+def param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=30,ylim=30,colorthresh=5,textthresh=5,colorfield=None):
+    print("deltaH: ", np.mean(cdws),np.std(cdws))
+    print("thermals: ",np.mean(thermals),np.std(thermals))
+    print("gprimes: ",np.mean(gprimes),np.std(gprimes))
+    print("slopes: ", np.mean(slopes),np.std(slopes))
     melts = np.asarray(cdws*np.asarray(thermals)*np.asarray(gprimes)*np.asarray(slopes)*np.asarray(fs))
     #melts = np.asarray(slopes)
     mys=np.asarray(mys)
     xs = np.asarray(([melts])).reshape((-1, 1))
-    model = LinearRegression().fit(xs, mys)
+    model = LinearRegression(fit_intercept=False).fit(xs, mys)
     r2 = model.score(xs,mys)
     rho0 = 1025
     rhoi = 910
@@ -480,14 +485,20 @@ def param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=30,
     W0 =  100000
     alpha =  (C/((rho0*Cp)/(rhoi*If*W0)))/(364*24*60*60)
     print('alpha: ', alpha)
+    print('intercept: ', model.intercept_)
     plt.rc('axes', titlesize=24)     # fontsize of the axes title
     xs = np.asarray(([melts])).reshape((-1, 1))
     model = LinearRegression().fit(xs, mys)
     r2 = model.score(xs,mys)
     melts = model.predict(xs)
     ax = plt.gca()
-    ax.scatter(melts[melts<colorthresh],mys[melts<colorthresh],c="blue")
-    ax.scatter(melts[melts>colorthresh],mys[melts>colorthresh],c="red")
+    if colorfield == None:
+        ax.scatter(melts[melts<colorthresh],mys[melts<colorthresh],c="blue")
+        ax.scatter(melts[melts>colorthresh],mys[melts>colorthresh],c="red")
+    else:
+        cm = ax.scatter(melts,mys,c=np.asarray(colorfield),vmin=-1,vmax=1,cmap="RdBu_r")
+        plt.colorbar(cm,ax=ax)
+
     markers, caps, bars = ax.errorbar(melts,mys,yerr=sigmas,ls='none')
     [bar.set_alpha(0.5) for bar in bars]
     ax.set_xlim(0,xlim)
@@ -501,7 +512,7 @@ def param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=30,
             texts.append(text)
     #adjust_text(texts)
     ax.plot(range(30),range(30))
-    ax.text(.05, .95, '$r^2=$'+str(round(r2,2)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
+    ax.text(.05, .95, '$r^2=$'+str(str(round(pearsonr(melts.T.flatten(),mys)[0]**2,2))), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
     ax.set_xlabel(r"$\dot{m}_{\mathrm{pred}} (m/yr)$",fontsize=24)
     ax.set_ylabel(r'$\dot{m}_{\mathrm{obs}} (m/yr)$',fontsize=24)
     plt.show()
@@ -549,7 +560,7 @@ def singleparam_vs_melt_fig(quant,mys,sigmas,labels,xlabel):
     melts = np.asarray(quant)
     mys=np.asarray(mys)
     xs = np.asarray(([melts])).reshape((-1, 1))
-    model = LinearRegression().fit(xs, mys)
+    model = LinearRegression(fit_intercept=False).fit(xs, mys)
     r2 = model.score(xs,mys)
     plt.rc('axes', titlesize=24)     # fontsize of the axes title
     xs = np.asarray(([melts])).reshape((-1, 1))
@@ -567,8 +578,233 @@ def singleparam_vs_melt_fig(quant,mys,sigmas,labels,xlabel):
         text=plt.annotate(labels[k],(quant[k],mys[k]))
         texts.append(text)
     #adjust_text(texts)
-    ax.text(.05, .95, '$r^2=$'+str(round(r2,2)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
+    print(pearsonr(melts.T.flatten(),mys)[0])
+    ax.text(.05, .95, '$r^2=$'+str(pearsonr(melts.T.flatten(),mys)[0]), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
     ax.set_xlabel(xlabel,fontsize=24)
     ax.set_ylabel(r'$\dot{m}_{\mathrm{obs}} (m/yr)$',fontsize=24)
     plt.show()
+
+def masslossparam(cdws,thermals,gprimes,slopes,fs,areas,ccoef,cint,wcoef,wint,thresh=2,mode="soft"):
+    if mode == "harsh":
+        melts = np.asarray(cdws*np.asarray(thermals)*np.asarray(gprimes)*np.asarray(slopes)*np.asarray(fs))*wcoef+wint
+        cmask = melts/thermals<thresh
+        wmask = ~cmask
+        melts[wmask] = (melts[wmask])*areas[wmask]
+        melts[cmask] = (slopes[cmask]*areas[cmask])*ccoef + cint
+        return melts
+    if mode == "soft":
+        def transition_func(x):
+            return (np.tanh((x-thresh)*3)+1)/2
+        warmmelts = np.asarray(cdws*np.asarray(thermals)*np.asarray(gprimes)*np.asarray(slopes)*np.asarray(fs))*wcoef+wint
+        #decider = warmmelts
+        decider = warmmelts/thermals
+        frac = transition_func(decider)
+        warmmassloss = warmmelts*areas
+        coldmassloss = (slopes*areas)*ccoef + cint
+        plt.plot(np.mean(frac,axis=0))
+        plt.show()
+        print(np.min(frac),np.max(frac))
+        print("more cold: ",np.sum(frac<0.5)/frac.size)
+        print("more warm: ",np.sum(frac>=0.5)/frac.size)
+        final = warmmassloss*frac+coldmassloss*(1-frac)
+        return final
+
+def param_vs_coldmelt_fig(cdws,salts,raw_temps,thermals,gprimes,slopes,volumes,fs,areas,gldepths,hubdepths,mys,sigmas,labels,polynas,polynas_weighted,colorthresh=5,textthresh=5):
+    melts = np.asarray(cdws*np.asarray(thermals)*np.asarray(gprimes)*np.asarray(slopes)*np.asarray(fs))
+    #melts = np.asarray(slopes)
+    mys=np.asarray(mys)
+    xs = np.asarray(([melts])).reshape((-1, 1))
+    model = LinearRegression(fit_intercept=False).fit(xs, mys)
+    r2 = model.score(xs,mys)
+    rho0 = 1025
+    rhoi = 910
+    Cp = 4186
+    If = 334000
+    C = model.coef_
+    W0 =  100000
+    alpha =  (C/((rho0*Cp)/(rhoi*If*W0)))/(364*24*60*60)
+    print('alpha: ', alpha)
+    print("C warm:", C)
+    print("int warm:", model.intercept_)
+    plt.rc('axes', titlesize=24)     # fontsize of the axes title
+    xs = np.asarray(([melts])).reshape((-1, 1))
+    model = LinearRegression(fit_intercept=False).fit(xs, mys)
+    r2 = model.score(xs,mys)
+
+    wcoef = model.coef_
+    wint = model.intercept_
+    melts = model.predict(xs)
+    ax = plt.gca()
+    print(np.min(melts/thermals),np.max(melts/thermals),np.mean(melts/thermals),np.std(melts/thermals))
+    print(np.asarray(labels)=="Getz")
+    gigatonconv = 10**(-12)
+    scalefactor = rhoi*gigatonconv*10**6
+
+    Ronnei = labels.index("Ronne")
+    Filchneri = labels.index("Filchner")
+    #meanfrisratio = (mys[Ronnei]*areas[Ronnei]+mys[Filchneri]*areas[Filchneri])*scalefactor/(polynas[Ronnei]+polynas[Filchneri])
+    #print("mreanfris",meanfrisratio)
+    #meanfrismelt = (mys[Ronnei]*areas[Ronnei]+mys[Filchneri]*areas[Filchneri])/(areas[Ronnei]+areas[Filchneri])
+    #mys[Ronnei]=meanfrismelt
+    #mys[Filchneri]=meanfrismelt
+
+    #sumfrispolyna = polynas[Ronnei] + polynas[Filchneri]
+    #polynas[Ronnei]=sumfrispolyna
+    #polynas[Filchneri]=sumfrispolyna
+
+    #sumfrisarea = areas[Ronnei]+areas[Filchneri]
+    #areas[Ronnei]=sumfrisarea
+    #areas[Filchneri]=sumfrisarea
+
+    B0 = (mys*areas*scalefactor-polynas)/1027*9.8*(7.8*10**(-4))
+    N = np.sqrt( (9.8/1027)*(gprimes*1027/9.8)/50)
+
+    he = (3/(2*0.025))**(1/3)*(1/N)*(np.abs(B0)/(np.sqrt(areas)))**(1/3)*np.sign(B0)
+
+    #ratio = gprimes*(mys*areas*scalefactor)/polynas
+
+    #ratio = 
+    rho0 = 1025
+    #rhoanom = ((1/ce)**0.5) * ((np.nanmean(localdens[rho_1i]))/(9.8*tcline_height))*np.sign(B0)*np.abs(f*shelf_width*B0/P)**0.5
+    #polynas[Ronnei]=meanfrispolyna
+    #polynas[Filchneri]=meanfrispolyna
+    #he[Ronnei]=-300
+    #he[Filchneri]=-300
+
+
+    #cmask = ratio<0.0005#0325
+    cmask = he<0#0.0005
+    #cmask[np.asarray(labels)=="Getz"]=0
+    #print(len(slopes[cmask]),len(areas[cmask]),len(mys[cmask]))
+    #areas = areas.T
+    #slopes = slopes.T[0]
+    adjpolyna = (salts+(-np.asarray(polynas)*(34.5/1000)*365*24*60*60)/(volumes*500*500)*641)-33.5
+    #adjpolyna = (-np.asarray(polynas)*(34.5/1000)*365*24*60*60)/(volumes*500*500)
+    plumerho = gsw.rho(34.10,-2.2,0)
+    rhoanom = ((1/(0.031))**(1/2))*((rho0))/(9.8*(hubdepths+200))*-np.sign(B0)*(np.abs(B0)/(fs))**(1/2)
+    fulldepthrho0 = gsw.rho(salts,raw_temps,0)
+    gprimechapman = 9.8*(-plumerho+fulldepthrho0+rhoanom)/rho0
+    #adjpolyna = (1/salts)
+    #adjpolyna = (gsw.rho(salts+(-np.asarray(polynas)*(34.5/1000)*365*24*60*60)/(volumes*500*500)*641,raw_temps,0)-gsw.rho(32.0,-1.9,0))/np.mean([gsw.rho(salts+(-np.asarray(polynas)*(34.5/1000)*365*24*60*60)/(volumes*500*500)*641,raw_temps,0),gsw.rho(32,-1.9,0)])
+    #glfreezing = (-1.9-gsw.CT_freezing(salts+(-np.asarray(polynas)*(34.5/1000)*365*24*60*60)/(volumes*500*500)*641,np.abs(gldepths),0))
+    glfreezing = (-1.8-gsw.CT_freezing(salts,np.abs(gldepths),0))
+    fig, ((ax1,ax2),(ax3,ax4),(ax5,ax6)) = plt.subplots(3,2)
+    ax1.scatter(hubdepths[cmask],mys[cmask])
+    for k in range(len(labels)):
+        if cmask[k]:
+           text=ax1.annotate(labels[k],(hubdepths[k],mys[k]))
+    ax1.set_title("thickness")
+    ax2.scatter(adjpolyna[cmask],mys[cmask])
+    for k in range(len(labels)):
+        if cmask[k]:
+            text=ax2.annotate(labels[k],(adjpolyna[k],mys[k]))
+    ax2.set_title("polyna")
+    ax3.scatter((slopes)[cmask],mys[cmask])
+    for k in range(len(labels)):
+        if cmask[k]:
+            text=ax3.annotate(labels[k],(slopes[k],mys[k]))
+    ax3.set_title("slopes")
+    ax4.scatter(glfreezing[cmask],mys[cmask])
+    for k in range(len(labels)):
+        if cmask[k]:
+            text=ax4.annotate(labels[k],(glfreezing[k],mys[k]))
+
+    ax4.set_title("freezing")
+    ax5.scatter((gprimes*hubdepths*adjpolyna*slopes)[cmask],mys[cmask])
+    sigmas = np.asarray(sigmas)
+    markers, caps, bars = ax5.errorbar((gprimes*hubdepths*adjpolyna*slopes)[cmask],mys[cmask],yerr=sigmas[cmask],ls='none')
+    [bar.set_alpha(0.5) for bar in bars]
+    for k in range(len(labels)):
+        if cmask[k]:
+            text=ax5.annotate(labels[k],((gprimes*hubdepths*adjpolyna*slopes)[k],mys[k]))
+    ax5.set_title("product")
+    ax6.scatter(gprimechapman[cmask],mys[cmask])
+    for k in range(len(labels)):
+        if cmask[k]:
+            text=ax6.annotate(labels[k],(gprimechapman[k],mys[k]))
+    ax6.set_title("gprimes")
+ 
+    plt.show()
+
+    print(slopes)
+    print(areas)
+
+    fig, ax = plt.subplots(1,1)
+    #coldprod = np.asarray(polynas)*np.asarray(slopes)*np.asarray(areas)*gsw.CT_freezing(34.9,np.abs(gldepths),0)
+    #coldprod = np.asarray(polynas)*np.asarray(slopes)*gsw.CT_freezing(34.9,np.abs(gldepths),0)
+    #coldprod = gsw.CT_freezing(34.9,np.abs(gldepths),0)*np.asarray(polynas)*np.asarray(slopes)
+    #coldprod = (1.9-gsw.CT_freezing(34.9,np.abs(gldepths),0))*np.asarray(slopes)*np.log10(np.asarray(polynas)/np.asarray(volumes))
+    #coldprod = (1.9-gsw.CT_freezing(34.9,np.abs(gldepths),0))*np.asarray(slopes)*(np.asarray(polynas)/np.asarray(volumes))
+    polynas = polynas*(34.5/1000)*365*24*60*60
+    print("polynas:",polynas/(volumes*500*500))
+    #coldprod = ((34.35+(-np.asarray(polynas)/(volumes*500*500))*641)-34.2)*slopes
+    #coldprod = adjpolyna*slopes*(np.abs(hubdepths))*np.asarray(fs)*gprimes*glfreezing
+
+    coldprod = 0.007*slopes*(np.abs(hubdepths))*np.asarray(fs)*glfreezing#*gprimechapman#*glfreezing#*gprimechapman
+    #coldprod = (1/volumes)*slopes
+    print("coldprod:",coldprod)
+    #coldprod = (1.9-gsw.CT_freezing(34.9,np.abs(gldepths),0))*np.asarray(slopes)*np.asarray(polynas)/np.asarray(volumes)
+    xs = np.asarray(([coldprod[cmask]*areas[cmask]])).reshape((-1, 1))
+    #coldmodel = LinearRegression(fit_intercept=False).fit(xs, np.asarray(mys[cmask])*np.asarray(areas[cmask]))
+    coldmodel = LinearRegression(fit_intercept=False).fit(xs, np.asarray(mys[cmask]*areas[cmask]))
+    r2 = coldmodel.score(xs,np.asarray(mys[cmask]*areas[cmask]))
+
+    alpha =  (coldmodel.coef_/((rho0*Cp)/(rhoi*If*W0)))/(364*24*60*60)
+    print("C cold:", coldmodel.coef_)
+    print("int cold:", coldmodel.intercept_)
+    print("alpha cold:",alpha)
+    ccoef = coldmodel.coef_
+    cint = coldmodel.intercept_
+    coldpred = coldprod[cmask]*coldmodel.coef_*scalefactor*areas[cmask]
+    coldans = np.asarray(mys[cmask])*np.asarray(areas[cmask])*scalefactor
+    warmpred = np.asarray(melts[~cmask])*np.asarray(areas[~cmask])*scalefactor
+    warmans = np.asarray(mys[~cmask])*np.asarray(areas[~cmask])*scalefactor
+    print("warmans sum: ,", np.sum(warmans))
+    print("warmpred sum: ,", np.sum(warmpred))
+    print("coldans sum: ,", np.sum(coldans))
+    print("coldpred sum: ", np.sum(coldpred))
+    print("total ans sum: ", np.sum(warmans)+np.sum(coldans))
+    print("total pred sum: ", np.sum(warmpred)+np.sum(coldpred))
+    ax.scatter(warmpred,warmans,c="red")
+    ax.scatter(coldpred,coldans,c="blue")
+    xs = np.concatenate((warmpred,coldpred))
+    ys = np.concatenate((warmans,coldans))
+    xs = np.asarray(([xs])).reshape((-1, 1))
+    model = LinearRegression(fit_intercept=False).fit(xs, ys)
+    r2 = pearsonr(xs.flatten(),ys.flatten()).statistic**2
+    #markers, caps, bars = ax.errorbar(melts,mys,yerr=sigmas,ls='none')
+    #[bar.set_alpha(0.5) for bar in bars]
+    #ax.set_xlim(0,xlim)
+    #ax.set_ylim(0,ylim)
+
+    sigmas = np.asarray(sigmas)
+    plt.xticks(fontsize=18)
+    plt.yticks(fontsize=18)
+    texts = []
+    for k in range(len(labels)):
+        if cmask[k]:
+            1+1
+            text=plt.annotate(labels[k],(coldprod[k]*areas[k]*coldmodel.coef_*scalefactor,mys[k]*areas[k]*scalefactor))
+            #text=plt.annotate(labels[k],(coldprod[k]*coldmodel.coef_*scalefactor,mys[k]*areas[k]*scalefactor))
+            texts.append(text)
+        else:
+            1+1
+            text=plt.annotate(labels[k],(melts[k]*areas[k]*scalefactor,mys[k]*areas[k]*scalefactor))
+            #texts.append(text)
+
+    markers, caps, bars = ax.errorbar(coldpred,coldans,yerr=sigmas[cmask]*scalefactor*areas[cmask],ls='none')
+    [bar.set_alpha(0.5) for bar in bars]
+    markers, caps, bars = ax.errorbar(warmpred,warmans,yerr=sigmas[~cmask]*scalefactor*areas[~cmask],ls='none')
+    [bar.set_alpha(0.5) for bar in bars]
+    #adjust_text(texts)
+    ax.set_xscale('log')
+    ax.set_yscale('log')
+    ax.plot(range(30),range(30))
+    ax.text(.05, .95, '$r^2=$'+str(round(r2,2)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
+    ax.set_xlabel(r"$\dot{M}_{\mathrm{pred}} (Gt/yr)$",fontsize=24)
+    ax.set_ylabel(r'$\dot{M}_{\mathrm{obs}} (Gt/yr)$',fontsize=24)
+    ax.plot((0,np.max(warmans)),(0,np.max(warmans)))
+    plt.show()
+    breakpoint()
+    return ccoef,cint,wcoef,wint
 

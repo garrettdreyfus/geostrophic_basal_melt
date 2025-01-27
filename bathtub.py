@@ -11,29 +11,12 @@ from scipy.ndimage import binary_dilation as bd
 import xarray as xr
 import rioxarray as riox
 import rasterio
+import matplotlib.pyplot as plt
 
 def PolyArea(x,y):
     return 0.5*np.abs(np.dot(x,np.roll(y,1))-np.dot(y,np.roll(x,1)))
 
-def shelf_areas():
-    myshp = open("regions/IceBoundaries_Antarctica_v02.shp", "rb")
-    mydbf = open("regions/IceBoundaries_Antarctica_v02.dbf", "rb")
-    myshx = open("regions/IceBoundaries_Antarctica_v02.shx", "rb")
-    r = shapefile.Reader(shp=myshp, dbf=mydbf, shx=myshx)
-    s = r.shapes()
-    records = r.shapeRecords()
-    print(records[0])
-    polygons =  {}
-    for i in range(len(s)):
-        l = s[i]
-        name = records[i].record[0]
-        kind = records[i].record[3]
-        if l.shapeTypeName == 'POLYGON' and kind== "FL":
-            xs, ys = zip(*l.points)
-            area = PolyArea(xs,ys)
-            polygons[name] = area
-    return polygons
- 
+
 
 def save_polygons():
     myshp = open("regions/IceBoundaries_Antarctica_v02.shp", "rb")
@@ -116,8 +99,7 @@ def shelf_areas():
             polygons[name] = PolyArea(xs,ys)
     return polygons
 
-def closest_shelf(coord,polygons):
-    min_dist = 1000
+def closest_shelf(coord,polygons,min_dist=1000):
     closestname = None
     closestpolygon = None
     for i, (k, v) in enumerate(polygons.items()):
@@ -237,3 +219,42 @@ def shelf_numbering(polygons,bed):
 
     return shelf_number_labels, shelf_numbers
 
+def dump_volume(shelf,polygons):
+    icemask = np.asarray(shelf.icemask_grounded_and_shelves.values)
+    beddepth = np.asarray(shelf.bed.values)
+    front = np.logical_and(bd(icemask==1,iterations=100),np.isnan(icemask))
+    shelf_keys = []
+    depths = []
+    shelves = {}
+
+    for i in tqdm(range(1,icemask.shape[0]-1)):
+        for j in  range(1,icemask.shape[1]-1):
+            if front[i][j]:
+                cn, _, _ = closest_shelf([shelf.x.values[j],shelf.y.values[i]],polygons)
+                if cn:
+                    shelf_keys.append(cn)
+                    depths.append(beddepth[i,j])
+    front_depths_by_shelf = shelf_sort(shelf_keys,depths)
+    dump_volume_by_shelf = {}
+    return front_depths_by_shelf
+
+def front_thickness(shelf,polygons):
+    icemask = np.asarray(shelf.icemask_grounded_and_shelves.values)
+    beddepth = np.asarray(shelf.bed.values)
+    draft = shelf.surface.values-shelf.thickness.values
+    front = np.logical_and(bd(np.isnan(icemask),iterations=1),(icemask==1))
+    shelf_keys = []
+    depths = []
+    shelves = {}
+
+    for i in tqdm(range(1,icemask.shape[0]-1)):
+        for j in range(1,icemask.shape[1]-1):
+            if front[i][j]:
+                cn, _, _ = closest_shelf([shelf.x.values[j],shelf.y.values[i]],polygons)
+                if cn:
+                    if draft[i,j]==0:
+                        print("feck")
+                    shelf_keys.append(cn)
+                    depths.append(abs(draft[i,j]))
+    depth_thicknesses_by_shelf = shelf_sort(shelf_keys,depths)
+    return depth_thicknesses_by_shelf
