@@ -1,50 +1,52 @@
-'Shelf Name', 'Classification', 'Citation', 'Explanation for shelves without direct observations found'
-'George VI ', 'connected', '(Jenkins and Jacobs 2018)', ''
-'Bach ', 'connected', '(Ruan et al. 2021)', ''
-'Wilkins ', 'connected', '(Ruan et al. 2021)  (Jenkins and Jacobs 2018)','by proximity'
-'Stange ', 'connected', '(Ruan et al. 2021)',''
-'Venable ', 'connected', '(Ruan et al. 2021)',''
-'Abbot', 'connected', '(Schubert et al. 2021)',''
-'Cosgrove', 'connected', '(Jacobs et al. 2012)', 'by proximity'
-'Pine Island', 'connected', '(Jenkins et al. 2010)',''
-'Thwaites', 'connected', '(Wåhlin et al. 2021)',''
-'Crosson', 'connected', '(Jacobs et al. 2012)',''
-'Dotson', 'connected', '(Randall-Goodwin et al. 2015)',''
-'Getz_East', 'connected', '(Randall-Goodwin et al. 2015)',''
-'Getz_West', 'connected', '(Assmann et al. 2019)',''
-'Land', connected, '(Baines and Condie et al. 1985) and (Nihashi et al. 2024)', 'lack of DSW on slope and lack of polyna production'
-'Nickerson', 'connected','(Baines and Condie et al. 1985) and (Nihashi et al. 2024)','lack of DSW on slope and lack of polyna production'
-'Sulzberger', 'connected','(Baines and Condie et al. 1985) and (Nihashi et al. 2024)','lack of DSW on slope and lack of polyna production'
-'Withrow', 'connected', '(Baines and Condie et al. 1985) and (Nihashi et al. 2024)','lack of DSW on shelf and lack of polyna production'
-'Ross West', 'disconnected', '(Smethie Jr. and Jacobs, 2005)',''
-'Ross East', 'disconnected', '(Smethie Jr. and Jacobs, 2005)',''
-'Drygalski', 'connected', '(Stevens et al. 2017)',''
-'Nansen', 'disconnected', '(Budillon and Spezie 2000) and (Cappelletti et al. 2010)',''
-'Mariner', 'unknown', '(Nihashi et al. 2024) and (Silvano et al. 2017)','by proximity as well as lack of observed polyna production'
-'Moscow University', 'connected', '(Silvano et al. 2017)',''
-'Rennick','connected','(Nihashi et al. 2024)','lack of observed polyna production'
-'Cook','connected','(Nihashi et al. 2024)','lack of observed polyna production'
-'Mertz', 'disconnected', '(Silvano et al. 2016)',''
-'Holmes', 'connected', '(Nihashi et al. 2024)','lack of observed polyna production'
-'Totten', 'connected', '(Silvano et al. 2016)',''
-'Amery', 'both', '(Silvano et al. 2016)',''  
-'Shackleton','disconnected','(Ribeiro et al. 2023)','seems there has been increased presence of mCDW but still not very warm'
-'West', 'disconnected','(Portela et al. 2021)','based on prevalence of DSW in barrier polynya'
-'Prince Harald', 'connected', '(Narayanan et al. 2019)', 'seal data near ice edge shows elevated  CDW presence but it is unclear what the hydrography looks like right at the ice edge'
-'Brunt_Stancomb', 'disconnected', '(Fer et al. 2012)', 'CTD section along western flank shows signs of convection'
-'Riiser-Larsen',
-'Quar',
-'Ekstrom', 'disconnected','(Zeising et al. 2024) and (Smith et al. 2020)', ''
-'Baudouin',
-'Borchgrevink',
-'Lazarev',
-'Fimbul', 'connected', '(Hatterman et al. 2012) and (Price et al. 2008)',  ''
-'Nivl',
-'Vigrid',
-'Atka',
-'Jelbart',
-'Ronne', 'disconnected'
-'Filchner', 'disconnected'
-'Larsen D',
-'Larsen C',
-'Larsen B', 
+Shelf Name, Classification, Citation, Explanation for shelves without direct observations found
+Bach, connected, (Ruan et al. 2021), 
+George_VI, connected, (Jenkins and Jacobs 2018), 
+Wilkins, connected, (Ruan et al. 2021)  (Jenkins and Jacobs 2018),by proximity
+Stange, connected, (Ruan et al. 2021),
+Venable, connected, (Ruan et al. 2021),
+Abbot, connected, (Schubert et al. 2021),
+Cosgrove, connected, (Jacobs et al. 2012), by proximity
+Pine_Island, connected, (Jenkins et al. 2010),
+Thwaites, connected, (Wåhlin et al. 2021),
+Crosson, connected, (Jacobs et al. 2012),
+Dotson, connected, (Randall-Goodwin et al. 2015),
+Getz_East, connected, (Randall-Goodwin et al. 2015),
+Getz_West, connected, (Assmann et al. 2019),
+Getz, connected, (Assmann et al. 2019) and (Randall-Goodwin et al. 2015),
+Land, connected, (Baines and Condie et al. 1985) and (Nihashi et al. 2024), lack of DSW on slope and lack of polyna production
+Nickerson, connected,(Baines and Condie et al. 1985) and (Nihashi et al. 2024),lack of DSW on slope and lack of polyna production
+Sulzberger, connected,(Baines and Condie et al. 1985) and (Nihashi et al. 2024),lack of DSW on slope and lack of polyna production
+Withrow, connected, (Baines and Condie et al. 1985) and (Nihashi et al. 2024),lack of DSW on shelf and lack of polyna production
+Ross_West, disconnected, (Smethie Jr. and Jacobs 2005), 
+Ross_East, disconnected, (Smethie Jr. and Jacobs 2005), 
+Drygalski, connected, (Stevens et al. 2017), 
+Nansen, disconnected, (Budillon and Spezie 2000) and (Cappelletti et al. 2010),
+Mariner, unknown, (Nihashi et al. 2024) and (Silvano et al. 2017),by proximity as well as lack of observed polyna production
+Moscow_University, connected, (Silvano et al. 2017),
+Rennick,connected,(Nihashi et al. 2024),lack of observed polyna production
+Cook, unknown, (Nihashi et al. 2024),lack of observed polyna production
+Mertz, disconnected, (Silvano et al. 2016),
+Holmes, connected, (Nihashi et al. 2024),lack of observed polyna production
+Totten, connected, (Silvano et al. 2016),
+Amery, both, (Silvano et al. 2016),  
+Shackleton,disconnected,(Ribeiro et al. 2023),seems there has been increased presence of mCDW but still not very warm
+West, disconnected,(Portela et al. 2021),based on prevalence of DSW in barrier polynya
+Prince_Harald, connected, (Narayanan et al. 2019), seal data near ice edge shows elevated  CDW presence but it is unclear what the hydrography looks like right at the ice edge
+Brunt_Stancomb, disconnected, (Fer et al. 2012), CTD section along western flank shows signs of convection
+Riiser-Larsen,,,
+Quar,
+Ninnis, disconnected, (Moreau et al. 2019)
+Ekstrom, disconnected, (Zeising et al. 2024) and (Smith et al. 2020), 
+Baudouin,
+Borchgrevink,
+Lazarev,
+Fimbul, connected, (Hatterman et al. 2012) and (Price et al. 2008),  
+Nivl, connected,
+Vigrid, connected
+Atka,
+Jelbart,
+Ronne, disconnected,
+Filchner, disconnected,
+Larsen D,connected,
+Larsen C,connected,
+Larsen B, connected,

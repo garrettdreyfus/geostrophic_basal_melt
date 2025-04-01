@@ -8,6 +8,8 @@ import woa
 import matplotlib.colors as colors
 import paperfigures as pf
 import cdw
+import ipdb
+import pandas as pd
 
 #These flags just make it easy to turn off and steps of the analysis 
 writeBedMach = False
@@ -15,7 +17,7 @@ writeShelfNumbers = False
 writeHUB = False
 writePolygons = False
 writeGL =False
-createWOA = False
+createWOA = True
 createGISS = False
 createClosestShelfPoints = False
 createClosestHydro = False
@@ -94,10 +96,10 @@ for l in range(len(grid)):
 ################################################
 if createWOA:
     sal,temp = woa.create_WOA(bedmach)
-    with open("data/woa.pickle","wb") as f:
+    with open("data/woanew.pickle","wb") as f:
         pickle.dump([sal,temp],f)
 
-with open("data/woa.pickle","rb") as f:
+with open("data/woanew.pickle","rb") as f:
     sal,temp = pickle.load(f)
 
 ################################################
@@ -276,67 +278,95 @@ thermals = np.asarray(thermals)[:,0]
 mys = np.asarray(mys)
 
 
-fig, (ax1,ax2) = plt.subplots(1,2)
 sorti = np.argsort(polynas)[::-1]
-rhoi=910
 gigatonconv = 10**(-12)
+rhoi=910
 scalefactor = rhoi*gigatonconv*10**6
-Ronnei = labels.index("Ronne")
-Filchneri = labels.index("Filchner")
-#meanfrisratio = (mys[Ronnei]*areas[Ronnei]+mys[Filchneri]*areas[Filchneri])*scalefactor/(polynas[Ronnei]+polynas[Filchneri])
-#print("mreanfris",meanfrisratio)
-#meanfrismelt = (mys[Ronnei]*areas[Ronnei]+mys[Filchneri]*areas[Filchneri])/(areas[Ronnei]+areas[Filchneri])
-#mys[Ronnei]=meanfrismelt
-#mys[Filchneri]=meanfrismelt
-#
-#sumfrispolyna = polynas[Ronnei] + polynas[Filchneri]
-#polynas[Ronnei]=sumfrispolyna
-#polynas[Filchneri]=sumfrispolyna
-##
-#sumareas = areas[Ronnei] + areas[Filchneri]
-#areas[Ronnei]=sumareas
-#areas[Filchneri]=sumareas
-
 B0 = (mys*areas*scalefactor-polynas)/1027*9.8*(7.8*10**(-4))
-N = np.sqrt(gprimes/50)
-print(N)
-#he = (3/(2*0.025))**(1/3)*(1/N)*(np.abs(B0)))**(1/3)*np.sign(B0)
-he = 3.9*(np.abs(B0)/(np.sqrt(areas)) *2)**(1/3)*(1/N)*np.sign(B0) 
 
-ratio = gprimes*(mys*areas*scalefactor-polynas)
-
-#p = ax2.bar(np.asarray(labels)[sorti],ratio[sorti],label=np.asarray(labels)[sorti])
-p = ax1.bar(np.asarray(labels)[sorti],B0[sorti],label=np.asarray(labels)[sorti])
-p = ax2.bar(np.asarray(labels)[sorti],he[sorti],label=np.asarray(labels)[sorti])
-ax2.axhline(y=0.0005)
-ax1.tick_params(labelrotation=90)
-ax2.tick_params(labelrotation=90)
-plt.show()
-
-fig, ax1 = plt.subplots(1,1)
-ratiolow = ((mys-sigmas)*areas*scalefactor-polynas)/1027*9.8*(7.8*10**(-4))#gprimes*(mys-sigmas)*areas*scalefactor/polynas
-ratiohigh = ((mys+sigmas)*areas*scalefactor-polynas)/1027*9.8*(7.8*10**(-4))
-#ax1.bar(np.asarray(labels)[sorti],ratiohigh[sorti],label=np.asarray(labels)[sorti],color="red")
-#ax1.bar(np.asarray(labels)[sorti],ratiolow[sorti],label=np.asarray(labels)[sorti],color="blue")
-#ax2.bar(np.asarray(labels)[sorti],ratiohigh[sorti],label=np.asarray(labels)[sorti])
-colors = 3 == np.abs(np.sign(B0) + np.sign((mys-sigmas)*areas*scalefactor-polynas) + np.sign((mys+sigmas)*areas*scalefactor-polynas))
-colors = list(colors)
-for i in range(len(colors)):
-    if colors[i]:
-        colors[i]="lightgray"
+shelf_class = pd.read_csv("shelf_classification.csv",sep=',')
+shelf_color = []
+shelf_classnumber = []
+for i in labels:
+    classification = shelf_class.loc[shelf_class['Shelf Name']==i].values[0][1]
+    explanation = shelf_class.loc[shelf_class['Shelf Name']==i].values[0][3]
+    print(explanation)
+    if classification and type(classification) == str:
+        if 'both' in classification:
+            shelf_color.append("gray")
+            shelf_classnumber.append(0)
+        if 'disconnected' in classification:
+            if type(explanation) == str:
+                shelf_color.append("plum")
+                shelf_classnumber.append(-0.5)
+            else:
+                shelf_color.append("fuchsia")
+                shelf_classnumber.append(-1)
+        elif 'connected' in classification:
+            if type(explanation) == str:
+                shelf_color.append("bisque")
+                shelf_classnumber.append(0.5)
+            else:
+                shelf_color.append("orange")
+                shelf_classnumber.append(1)
+        elif 'unknown' in classification:
+            shelf_color.append("gray")
+            shelf_classnumber.append(0)
+        else:
+            1+1
+            # print(i)
+            # print(classification)
     else:
-        colors[i]="purple"
-ax1.scatter(range(len(labels)),B0,c=colors,s=50,marker="s")
-ax1.errorbar(range(len(labels)),B0,yerr=sigmas*areas*scalefactor/1027*9.8*(7.8*10**(-4)),linestyle='',ecolor=colors,elinewidth=5)
-ax1.set_ylabel("Net Buoyancy Flux $(m^2 s^{-3})$",fontsize=18)
-ax1.set_xticks(ticks=range(len(labels)),labels=labels)
-ax1.axhline(y=0.0000,color="black")
-ax1.tick_params(axis='both', which='major', labelsize=14)
-ax1.tick_params(labelrotation=70)
-plt.tight_layout()
-plt.show()
+        shelf_color.append('white')
+        shelf_classnumber.append(np.nan)
+            
 plt.close()
+fig,ax=plt.subplots(1,1,figsize=(6,9))
+sortlist = np.argsort(np.asarray(shelf_classnumber))
+sorted_nums = list(np.asarray(shelf_classnumber)[sortlist])
 
+
+count=0
+for c in sorted(np.unique(shelf_classnumber)):
+    categorymask = shelf_classnumber==c
+    Bcat = B0[categorymask]
+    sigmacat = np.asarray(sigmas)[categorymask]
+    sortmask = np.argsort(Bcat)
+    counts = range(count,count+np.sum(shelf_classnumber==c))
+    ax.errorbar(Bcat[sortmask],counts,xerr=np.asarray(sigmacat)[sortmask]*areas[categorymask][sortmask]*scalefactor/1027*9.8*(7.8*10**(-4)),linestyle='',ecolor="darkgray",alpha=0.25)
+    ax.scatter(Bcat[sortmask],counts,c=np.asarray(shelf_color)[categorymask][sortmask],zorder=2)
+
+    labelstrunc = np.asarray(labels)[categorymask][sortmask]
+    for i in range(len(labelstrunc)):
+        if np.sign(Bcat[sortmask][i])>0:
+            ax.annotate(labelstrunc[i],(Bcat[sortmask][i]+2.5e-5,counts[i]-0.25),horizontalalignment='left')
+        if np.sign(Bcat[sortmask][i])<0:
+            ax.annotate(labelstrunc[i],(Bcat[sortmask][i]-2.5e-5,counts[i]-0.25),horizontalalignment='right')
+        #ax.annotate(labelstrunc[i],(0.001,counts[i]))
+    count+=np.sum(shelf_classnumber==c)
+
+plt.axhspan(0-0.5,sorted_nums.index(-0.5)-0.5,color="fuchsia",alpha=0.1)
+plt.axhspan(sorted_nums.index(-0.5)-0.5,sorted_nums.index(0)-0.5,color="plum",alpha=0.1)
+
+plt.axhspan(sorted_nums.index(0)-0.5,sorted_nums.index(0.5)-0.5,color="gray",alpha=0.1)
+
+plt.axhspan(sorted_nums.index(0.5)-0.5,sorted_nums.index(1)-0.5,color="bisque",alpha=0.1)
+plt.axhspan(sorted_nums.index(1)-0.5,len(sorted_nums)-0.5,color="orange",alpha=0.1)
+
+x1 = ((sorted_nums.index(-0.5)-0.5) + (0-0.5))/2
+x2 = ((sorted_nums.index(-0.5)-0.5) + (sorted_nums.index(0)-0.5))/2
+x3 = ((sorted_nums.index(0)-0.5) + (sorted_nums.index(0.5)-0.5))/2
+x4 = ((sorted_nums.index(0.5)-0.5) + (sorted_nums.index(1)-0.5))/2
+x5 = ((sorted_nums.index(1)-0.5) + len(sorted_nums))/2
+
+ax.set_yticks([x1,x2,x3,x4,x5])
+ax.set_yticklabels(['disconnected','likely disconnected','unknown or both','likely connected','connected'])
+ax.set_xlim(-0.0015,0.0015)
+ax.set_xlabel("$B_{total}$")
+ax.axvline(x=0,linestyle='--',color='gray')
+fig.subplots_adjust(left=0.3)
+plt.savefig("/home/garrett/Downloads/b0class.svg")
+ipdb.set_trace()
 #pf.hub_schematic_figure()
 #exit()
 #pf.closestMethodologyFig(bedmach,grid,physical,hubs,closest_points,sal,temp,shelves)
