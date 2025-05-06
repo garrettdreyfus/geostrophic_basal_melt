@@ -29,7 +29,7 @@ Mertz, disconnected, (Silvano et al. 2016),
 Holmes, connected, (Nihashi et al. 2024),lack of observed polyna production
 Totten, connected, (Silvano et al. 2016),
 Amery, both, (Silvano et al. 2016),  
-Shackleton,disconnected,(Ribeiro et al. 2023),seems there has been increased presence of mCDW but still not very warm
+Shackleton,connected,(Ribeiro et al. 2023),seems there has been increased presence of mCDW but still not very warm
 West, disconnected,(Portela et al. 2021),based on prevalence of DSW in barrier polynya
 Prince_Harald, connected, (Narayanan et al. 2019), seal data near ice edge shows elevated  CDW presence but it is unclear what the hydrography looks like right at the ice edge
 Brunt_Stancomb, disconnected, (Fer et al. 2012), CTD section along western flank shows signs of convection
@@ -40,7 +40,7 @@ Ekstrom, disconnected, (Zeising et al. 2024) and (Smith et al. 2020),
 Baudouin,
 Borchgrevink,
 Lazarev,
-Fimbul, connected, (Hatterman et al. 2012) and (Price et al. 2008),  
+Fimbul, disconnected, (Hatterman et al. 2012) and (Price et al. 2008), Warm water entry a la morrison et al. 2020   
 Nivl, connected,
 Vigrid, connected
 Atka,

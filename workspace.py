@@ -21,7 +21,7 @@ createWOA = True
 createGISS = False
 createClosestShelfPoints = False
 createClosestHydro = False
-createQuants = False
+createQuants = True
 createSlopes = False
 createVolumes = False
 
@@ -149,9 +149,9 @@ with open("data/new_slopes_by_shelf.pickle","rb") as f:
 if createQuants:
     #for i in range(len(closest_points)):
         #closest_hydro[i] = 109752
-    hubheats,cdwdepths,gprimes = cdw.parameterization_quantities(bedmach,grid,physical,hubs,closest_hydro,sal,temp,shelf_keys,quant="hubheat",debug=False)
-    #with open("data/stats_woa.pickle","wb") as f:
-        #pickle.dump((hubheats,cdwdepths,gprimes),f)
+    _,_,hubheats,cdwdepths,gprimes = cdw.parameterization_quantities(bedmach,grid,physical,hubs,closest_hydro,sal,temp,shelf_keys,quant="hubheat",debug=False)
+    with open("data/stats_woa.pickle","wb") as f:
+        pickle.dump((hubheats,cdwdepths,gprimes),f)
 with open("data/stats_kitkaboodle.pickle","rb") as f:
     (salts,raw_temps,hubheats,cdwdepths,gprimes) = pickle.load(f)
 with open("data/stats_woa.pickle","rb") as f:
@@ -273,6 +273,7 @@ salts = np.asarray(salts)
 gldepths = np.asarray(gldepths)
 raw_temps = np.asarray(raw_temps)
 cdws = np.asarray(cdws)[:,0]
+#cdws[cdws<50]=50
 fs = np.asarray(fs)[:,0]
 thermals = np.asarray(thermals)[:,0]
 mys = np.asarray(mys)
@@ -284,114 +285,51 @@ rhoi=910
 scalefactor = rhoi*gigatonconv*10**6
 B0 = (mys*areas*scalefactor-polynas)/1027*9.8*(7.8*10**(-4))
 
-shelf_class = pd.read_csv("shelf_classification.csv",sep=',')
-shelf_color = []
-shelf_classnumber = []
-for i in labels:
-    classification = shelf_class.loc[shelf_class['Shelf Name']==i].values[0][1]
-    explanation = shelf_class.loc[shelf_class['Shelf Name']==i].values[0][3]
-    print(explanation)
-    if classification and type(classification) == str:
-        if 'both' in classification:
-            shelf_color.append("gray")
-            shelf_classnumber.append(0)
-        if 'disconnected' in classification:
-            if type(explanation) == str:
-                shelf_color.append("plum")
-                shelf_classnumber.append(-0.5)
+def read_shelf_class(labels):
+    shelf_class = pd.read_csv("shelf_classification.csv",sep=',')
+    shelf_color = []
+    shelf_classnumber = []
+    for i in labels:
+        classification = shelf_class.loc[shelf_class['Shelf Name']==i].values[0][1]
+        explanation = shelf_class.loc[shelf_class['Shelf Name']==i].values[0][3]
+        print(explanation)
+        if classification and type(classification) == str:
+            if 'both' in classification:
+                shelf_color.append("gray")
+                shelf_classnumber.append(0)
+            if 'disconnected' in classification:
+                if type(explanation) == str:
+                    shelf_color.append("plum")
+                    shelf_classnumber.append(-0.5)
+                else:
+                    shelf_color.append("fuchsia")
+                    shelf_classnumber.append(-1)
+            elif 'connected' in classification:
+                if type(explanation) == str:
+                    shelf_color.append("bisque")
+                    shelf_classnumber.append(0.5)
+                else:
+                    shelf_color.append("orange")
+                    shelf_classnumber.append(1)
+            elif 'unknown' in classification:
+                shelf_color.append("gray")
+                shelf_classnumber.append(0)
             else:
-                shelf_color.append("fuchsia")
-                shelf_classnumber.append(-1)
-        elif 'connected' in classification:
-            if type(explanation) == str:
-                shelf_color.append("bisque")
-                shelf_classnumber.append(0.5)
-            else:
-                shelf_color.append("orange")
-                shelf_classnumber.append(1)
-        elif 'unknown' in classification:
-            shelf_color.append("gray")
-            shelf_classnumber.append(0)
+                1+1
+                # print(i)
+                # print(classification)
         else:
-            1+1
-            # print(i)
-            # print(classification)
-    else:
-        shelf_color.append('white')
-        shelf_classnumber.append(np.nan)
+            shelf_color.append('white')
+            shelf_classnumber.append(np.nan)
+    return shelf_classnumber 
             
-plt.close()
-fig,ax=plt.subplots(1,1,figsize=(6,9))
-sortlist = np.argsort(np.asarray(shelf_classnumber))
-sorted_nums = list(np.asarray(shelf_classnumber)[sortlist])
-
-
-count=0
-for c in sorted(np.unique(shelf_classnumber)):
-    categorymask = shelf_classnumber==c
-    Bcat = B0[categorymask]
-    sigmacat = np.asarray(sigmas)[categorymask]
-    sortmask = np.argsort(Bcat)
-    counts = range(count,count+np.sum(shelf_classnumber==c))
-    ax.errorbar(Bcat[sortmask],counts,xerr=np.asarray(sigmacat)[sortmask]*areas[categorymask][sortmask]*scalefactor/1027*9.8*(7.8*10**(-4)),linestyle='',ecolor="darkgray",alpha=0.25)
-    ax.scatter(Bcat[sortmask],counts,c=np.asarray(shelf_color)[categorymask][sortmask],zorder=2)
-
-    labelstrunc = np.asarray(labels)[categorymask][sortmask]
-    for i in range(len(labelstrunc)):
-        if np.sign(Bcat[sortmask][i])>0:
-            ax.annotate(labelstrunc[i],(Bcat[sortmask][i]+2.5e-5,counts[i]-0.25),horizontalalignment='left')
-        if np.sign(Bcat[sortmask][i])<0:
-            ax.annotate(labelstrunc[i],(Bcat[sortmask][i]-2.5e-5,counts[i]-0.25),horizontalalignment='right')
-        #ax.annotate(labelstrunc[i],(0.001,counts[i]))
-    count+=np.sum(shelf_classnumber==c)
-
-plt.axhspan(0-0.5,sorted_nums.index(-0.5)-0.5,color="fuchsia",alpha=0.1)
-plt.axhspan(sorted_nums.index(-0.5)-0.5,sorted_nums.index(0)-0.5,color="plum",alpha=0.1)
-
-plt.axhspan(sorted_nums.index(0)-0.5,sorted_nums.index(0.5)-0.5,color="gray",alpha=0.1)
-
-plt.axhspan(sorted_nums.index(0.5)-0.5,sorted_nums.index(1)-0.5,color="bisque",alpha=0.1)
-plt.axhspan(sorted_nums.index(1)-0.5,len(sorted_nums)-0.5,color="orange",alpha=0.1)
-
-x1 = ((sorted_nums.index(-0.5)-0.5) + (0-0.5))/2
-x2 = ((sorted_nums.index(-0.5)-0.5) + (sorted_nums.index(0)-0.5))/2
-x3 = ((sorted_nums.index(0)-0.5) + (sorted_nums.index(0.5)-0.5))/2
-x4 = ((sorted_nums.index(0.5)-0.5) + (sorted_nums.index(1)-0.5))/2
-x5 = ((sorted_nums.index(1)-0.5) + len(sorted_nums))/2
-
-ax.set_yticks([x1,x2,x3,x4,x5])
-ax.set_yticklabels(['disconnected','likely disconnected','unknown or both','likely connected','connected'])
-ax.set_xlim(-0.0015,0.0015)
-ax.set_xlabel("$B_{total}$")
-ax.axvline(x=0,linestyle='--',color='gray')
-fig.subplots_adjust(left=0.3)
-plt.savefig("/home/garrett/Downloads/b0class.svg")
-ipdb.set_trace()
-#pf.hub_schematic_figure()
-#exit()
-#pf.closestMethodologyFig(bedmach,grid,physical,hubs,closest_points,sal,temp,shelves)
-#pf.hydro_vs_slope_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels)
-#pf.hydro_vs_slope_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=1500,ylim=0.005,nozone=(-1000,-1000))
-#pf.param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels)
-print(cdws)
-print(thermals)
-print(gprimes)
-print(slopes)
-print(fs)
-print(mys)
-rhoi = 910
-gigatonconv = 10**(-12)
-scalefactor = rhoi*gigatonconv*10**6
-ratio = (mys*areas*scalefactor)/polynas
-
-Ronnei = labels.index("Ronne")
-Filchneri = labels.index("Filchner")
-
 #meanfris = np.mean(ratio[Ronnei] + ratio[Filchneri])
 #ratio[Ronnei]=0
 #ratio[Filchneri]=0
 
-pf.param_vs_coldmelt_fig(cdws,salts,raw_temps,thermals,gprimes,slopes,dump_volumes,fs,areas,gldepths,hubshelf,mys,sigmas,labels,polynas,polynas_weighted,colorthresh=5,textthresh=5)
+shelf_classnumber = read_shelf_class(labels)
+
+pf.param_vs_coldmelt_fig(cdws,salts,raw_temps,thermals,gprimes,slopes,dump_volumes,fs,areas,gldepths,hubshelf,mys,sigmas,labels,polynas,polynas_weighted,shelf_classnumber,colorthresh=5,textthresh=5)
 #pf.param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=30,ylim=30,textthresh=0,colorthresh=5,colorfield=list(np.log10(ratio)))
 thermals =np.asarray(thermals)
 #pf.singleparam_vs_melt_fig((thermals*thermals)*slopes,mys,sigmas,labels,r'$\theta_{\mathrm{CDW}}-\theta_{\mathrm{surf}}$')

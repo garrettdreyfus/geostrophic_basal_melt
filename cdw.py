@@ -68,13 +68,13 @@ def gprime(heat_function,hub,shelf_key=None,lat=None,lon=None,debug=False):
 
 def pycnocline(heat_function,hub,shelf_key=None,lat=None,lon=None,debug=False):
     hub = np.abs(hub)
-    zi = np.arange(5,1500,1)
+    zi = np.arange(0,1500,1)
     ti = moving_average(heat_function[0](zi),50)
     si = moving_average(heat_function[1](zi),50)
     zi = moving_average(zi,50)
 
     di = gsw.rho(si,ti,zi)
-    dizi = np.abs(np.diff(di)/np.diff(zi))
+    dizi = np.diff(di)/np.diff(zi)
     thresh = np.quantile(dizi,0.85)
     zpyc = np.mean(zi[1:][dizi>thresh])
     zpyci = np.argmin(np.abs(zi-zpyc))

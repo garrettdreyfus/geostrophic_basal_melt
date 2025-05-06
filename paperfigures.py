@@ -609,7 +609,66 @@ def masslossparam(cdws,thermals,gprimes,slopes,fs,areas,ccoef,cint,wcoef,wint,th
         final = warmmassloss*frac+coldmassloss*(1-frac)
         return final
 
-def param_vs_coldmelt_fig(cdws,salts,raw_temps,thermals,gprimes,slopes,volumes,fs,areas,gldepths,hubdepths,mys,sigmas,labels,polynas,polynas_weighted,colorthresh=5,textthresh=5):
+def shelf_class_fig():
+
+    fig,ax=plt.subplots(1,1,figsize=(6,9))
+    sortlist = np.argsort(np.asarray(shelf_classnumber))
+    sorted_nums = list(np.asarray(shelf_classnumber)[sortlist])
+    count=0
+    for c in sorted(np.unique(shelf_classnumber)):
+        categorymask = shelf_classnumber==c
+        Bcat = B0[categorymask]
+        sigmacat = np.asarray(sigmas)[categorymask]
+        sortmask = np.argsort(Bcat)
+        counts = range(count,count+np.sum(shelf_classnumber==c))
+        ax.errorbar(Bcat[sortmask],counts,xerr=np.asarray(sigmacat)[sortmask]*areas[categorymask][sortmask]*scalefactor/1027*9.8*(7.8*10**(-4)),linestyle='',ecolor="darkgray",alpha=0.25)
+        ax.scatter(Bcat[sortmask],counts,c=np.asarray(shelf_color)[categorymask][sortmask],zorder=2)
+
+        labelstrunc = np.asarray(labels)[categorymask][sortmask]
+        for i in range(len(labelstrunc)):
+            if np.sign(Bcat[sortmask][i])>0:
+                ax.annotate(labelstrunc[i],(Bcat[sortmask][i]+2.5e-5,counts[i]-0.25),horizontalalignment='left')
+            if np.sign(Bcat[sortmask][i])<0:
+                ax.annotate(labelstrunc[i],(Bcat[sortmask][i]-2.5e-5,counts[i]-0.25),horizontalalignment='right')
+            #ax.annotate(labelstrunc[i],(0.001,counts[i]))
+        count+=np.sum(shelf_classnumber==c)
+
+    plt.axhspan(0-0.5,sorted_nums.index(-0.5)-0.5,color="fuchsia",alpha=0.1)
+    plt.axhspan(sorted_nums.index(-0.5)-0.5,sorted_nums.index(0)-0.5,color="plum",alpha=0.1)
+
+    plt.axhspan(sorted_nums.index(0)-0.5,sorted_nums.index(0.5)-0.5,color="gray",alpha=0.1)
+
+    plt.axhspan(sorted_nums.index(0.5)-0.5,sorted_nums.index(1)-0.5,color="bisque",alpha=0.1)
+    plt.axhspan(sorted_nums.index(1)-0.5,len(sorted_nums)-0.5,color="orange",alpha=0.1)
+
+    x1 = ((sorted_nums.index(-0.5)-0.5) + (0-0.5))/2
+    x2 = ((sorted_nums.index(-0.5)-0.5) + (sorted_nums.index(0)-0.5))/2
+    x3 = ((sorted_nums.index(0)-0.5) + (sorted_nums.index(0.5)-0.5))/2
+    x4 = ((sorted_nums.index(0.5)-0.5) + (sorted_nums.index(1)-0.5))/2
+    x5 = ((sorted_nums.index(1)-0.5) + len(sorted_nums))/2
+
+    ax.set_yticks([x1,x2,x3,x4,x5])
+    ax.set_yticklabels(['disconnected','likely disconnected','unknown or both','likely connected','connected'])
+    ax.set_xlim(-0.0015,0.0015)
+    ax.set_xlabel("$B_{total}$")
+    ax.axvline(x=0,linestyle='--',color='gray')
+    fig.subplots_adjust(left=0.3)
+    plt.savefig("/home/garrett/Downloads/b0class.svg")
+    ipdb.set_trace()
+    #pf.hub_schematic_figure()
+    #exit()
+    #pf.closestMethodologyFig(bedmach,grid,physical,hubs,closest_points,sal,temp,shelves)
+    #pf.hydro_vs_slope_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels)
+    #pf.hydro_vs_slope_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=1500,ylim=0.005,nozone=(-1000,-1000))
+    #pf.param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels)
+    rhoi = 910
+    gigatonconv = 10**(-12)
+    scalefactor = rhoi*gigatonconv*10**6
+    ratio = (mys*areas*scalefactor)/polynas
+
+
+
+def param_vs_coldmelt_fig(cdws,salts,raw_temps,thermals,gprimes,slopes,volumes,fs,areas,gldepths,hubdepths,mys,sigmas,labels,polynas,polynas_weighted,shelf_class,colorthresh=5,textthresh=5):
     melts = np.asarray(cdws*np.asarray(thermals)*np.asarray(gprimes)*np.asarray(slopes)*np.asarray(fs))
     #melts = np.asarray(slopes)
     mys=np.asarray(mys)
@@ -673,7 +732,8 @@ def param_vs_coldmelt_fig(cdws,salts,raw_temps,thermals,gprimes,slopes,volumes,f
 
 
     #cmask = ratio<0.0005#0325
-    cmask = he<0#0.0005
+    cmask = np.asarray(shelf_class)<=0#0.0005
+
     #cmask[np.asarray(labels)=="Getz"]=0
     #print(len(slopes[cmask]),len(areas[cmask]),len(mys[cmask]))
     #areas = areas.T
@@ -688,43 +748,43 @@ def param_vs_coldmelt_fig(cdws,salts,raw_temps,thermals,gprimes,slopes,volumes,f
     #adjpolyna = (gsw.rho(salts+(-np.asarray(polynas)*(34.5/1000)*365*24*60*60)/(volumes*500*500)*641,raw_temps,0)-gsw.rho(32.0,-1.9,0))/np.mean([gsw.rho(salts+(-np.asarray(polynas)*(34.5/1000)*365*24*60*60)/(volumes*500*500)*641,raw_temps,0),gsw.rho(32,-1.9,0)])
     #glfreezing = (-1.9-gsw.CT_freezing(salts+(-np.asarray(polynas)*(34.5/1000)*365*24*60*60)/(volumes*500*500)*641,np.abs(gldepths),0))
     glfreezing = (-1.8-gsw.CT_freezing(salts,np.abs(gldepths),0))
-    fig, ((ax1,ax2),(ax3,ax4),(ax5,ax6)) = plt.subplots(3,2)
-    ax1.scatter(hubdepths[cmask],mys[cmask])
-    for k in range(len(labels)):
-        if cmask[k]:
-           text=ax1.annotate(labels[k],(hubdepths[k],mys[k]))
-    ax1.set_title("thickness")
-    ax2.scatter(adjpolyna[cmask],mys[cmask])
-    for k in range(len(labels)):
-        if cmask[k]:
-            text=ax2.annotate(labels[k],(adjpolyna[k],mys[k]))
-    ax2.set_title("polyna")
-    ax3.scatter((slopes)[cmask],mys[cmask])
-    for k in range(len(labels)):
-        if cmask[k]:
-            text=ax3.annotate(labels[k],(slopes[k],mys[k]))
-    ax3.set_title("slopes")
-    ax4.scatter(glfreezing[cmask],mys[cmask])
-    for k in range(len(labels)):
-        if cmask[k]:
-            text=ax4.annotate(labels[k],(glfreezing[k],mys[k]))
+    # fig, ((ax1,ax2),(ax3,ax4),(ax5,ax6)) = plt.subplots(3,2)
+    # ax1.scatter(hubdepths,mys)
+    # for k in range(len(labels)):
+    #     if cmask[k] or True:
+    #        text=ax1.annotate(labels[k],(hubdepths[k],mys[k]))
+    # ax1.set_title("thickness")
+    # ax2.scatter(adjpolyna,mys)
+    # for k in range(len(labels)):
+    #     if cmask[k] or True:
+    #         text=ax2.annotate(labels[k],(adjpolyna[k],mys[k]))
+    # ax2.set_title("polyna")
+    # ax3.scatter((slopes),mys)
+    # for k in range(len(labels)):
+    #     if cmask[k] or True:
+    #         text=ax3.annotate(labels[k],(slopes[k],mys[k]))
+    # ax3.set_title("slopes")
+    # ax4.scatter(glfreezing,mys)
+    # for k in range(len(labels)):
+    #     if cmask[k] or True:
+    #         text=ax4.annotate(labels[k],(glfreezing[k],mys[k]))
 
-    ax4.set_title("freezing")
-    ax5.scatter((gprimes*hubdepths*adjpolyna*slopes)[cmask],mys[cmask])
-    sigmas = np.asarray(sigmas)
-    markers, caps, bars = ax5.errorbar((gprimes*hubdepths*adjpolyna*slopes)[cmask],mys[cmask],yerr=sigmas[cmask],ls='none')
-    [bar.set_alpha(0.5) for bar in bars]
-    for k in range(len(labels)):
-        if cmask[k]:
-            text=ax5.annotate(labels[k],((gprimes*hubdepths*adjpolyna*slopes)[k],mys[k]))
-    ax5.set_title("product")
-    ax6.scatter(gprimechapman[cmask],mys[cmask])
-    for k in range(len(labels)):
-        if cmask[k]:
-            text=ax6.annotate(labels[k],(gprimechapman[k],mys[k]))
-    ax6.set_title("gprimes")
+    # ax4.set_title("freezing")
+    # ax5.scatter((cdws),mys)
+    # sigmas = np.asarray(sigmas)
+    # markers, caps, bars = ax5.errorbar((cdws),mys,yerr=sigmas,ls='none')
+    # [bar.set_alpha(0.5) for bar in bars]
+    # for k in range(len(labels)):
+    #     if cmask[k] or True:
+    #         text=ax5.annotate(labels[k],((cdws)[k],mys[k]))
+    # ax5.set_title("cdws")
+    # ax6.scatter(gprimechapman[cmask],mys[cmask])
+    # for k in range(len(labels)):
+    #     if cmask[k] or True:
+    #         text=ax6.annotate(labels[k],(gprimechapman[k],mys[k]))
+    # ax6.set_title("gprimes")
  
-    plt.show()
+    # plt.show()
 
     print(slopes)
     print(areas)
@@ -740,7 +800,7 @@ def param_vs_coldmelt_fig(cdws,salts,raw_temps,thermals,gprimes,slopes,volumes,f
     #coldprod = ((34.35+(-np.asarray(polynas)/(volumes*500*500))*641)-34.2)*slopes
     #coldprod = adjpolyna*slopes*(np.abs(hubdepths))*np.asarray(fs)*gprimes*glfreezing
 
-    coldprod = 0.007*slopes*(np.abs(hubdepths))*np.asarray(fs)*glfreezing#*gprimechapman#*glfreezing#*gprimechapman
+    coldprod = slopes*(np.abs(hubdepths))*np.asarray(fs)*glfreezing#*gprimechapman#*glfreezing#*gprimechapman
     #coldprod = (1/volumes)*slopes
     print("coldprod:",coldprod)
     #coldprod = (1.9-gsw.CT_freezing(34.9,np.abs(gldepths),0))*np.asarray(slopes)*np.asarray(polynas)/np.asarray(volumes)
@@ -805,6 +865,5 @@ def param_vs_coldmelt_fig(cdws,salts,raw_temps,thermals,gprimes,slopes,volumes,f
     ax.set_ylabel(r'$\dot{M}_{\mathrm{obs}} (Gt/yr)$',fontsize=24)
     ax.plot((0,np.max(warmans)),(0,np.max(warmans)))
     plt.show()
-    breakpoint()
     return ccoef,cint,wcoef,wint
 

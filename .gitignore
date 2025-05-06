@@ -3,3 +3,4 @@
 paperfigures/
 __pycache__/
 *.png
+.cache/

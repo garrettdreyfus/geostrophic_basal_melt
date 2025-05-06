@@ -1,4 +1,3 @@
-
 from bathtub import closest_shelf
 from metpy.calc import lat_lon_grid_deltas
 import pyproj
@@ -7,6 +6,8 @@ import numpy as np
 import pickle
 from tqdm import tqdm
 import pandas as pd
+import matplotlib.pyplot as plt
+import ipdb
  
 def generate_polynaset2016():
     llset = open_CtlDataset('data/polynall.ctl')
@@ -49,6 +50,9 @@ def generate_polynaset2024():
     projection = pyproj.Proj("epsg:3031")
     X,Y = projection(lons,lats)
     prvals = df[2]*42*(10**6)
+    outvals = []
+    shelfnames = list(polygons.keys())
+    print(shelfnames)
     for coord in tqdm(range(len(lons))):
             val = prvals[coord]
             if val!=0:
@@ -58,11 +62,15 @@ def generate_polynaset2024():
                     dists[name] = []
                 shelves[name].append(val)
                 dists[name].append(dist)
-
+                if dist<100*1000 and val>0.1:
+                    outvals.append(shelfnames.index(name))
+                else:
+                    outvals.append(np.nan)
+    ipdb.set_trace()
     with open("data/newpolynainfo_2024.pickle","wb") as f:
         pickle.dump((shelves,dists),f)
 
-#generate_polynaset2024()
+generate_polynaset2024()
 
 with open("data/newpolynainfo_2024.pickle","rb") as f:
     shelves,dists = pickle.load(f)
