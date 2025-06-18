@@ -33,20 +33,20 @@ Shackleton,connected,(Ribeiro et al. 2023),seems there has been increased presen
 West, disconnected,(Portela et al. 2021),based on prevalence of DSW in barrier polynya
 Prince_Harald, connected, (Narayanan et al. 2019), seal data near ice edge shows elevated  CDW presence but it is unclear what the hydrography looks like right at the ice edge
 Brunt_Stancomb, disconnected, (Fer et al. 2012), CTD section along western flank shows signs of convection
-Riiser-Larsen,,,
-Quar,
+Riiser-Larsen,unknown,, NEED SEAL
+Quar, unknown,,
 Ninnis, disconnected, (Moreau et al. 2019)
 Ekstrom, disconnected, (Zeising et al. 2024) and (Smith et al. 2020), 
-Baudouin,
-Borchgrevink,
-Lazarev,
+Baudouin, likely disconnected, (Pattyn et al. 2012) and (Nihashi et al. 2024), Ice cores near grounding line find very small melt rates \ also Nihashi et al. finds large sea ice production rates
+Borchgrevink, unknown,,
+Lazarev, unknown,,
 Fimbul, disconnected, (Hatterman et al. 2012) and (Price et al. 2008), Warm water entry a la morrison et al. 2020   
-Nivl, connected,
-Vigrid, connected
-Atka,
-Jelbart,
-Ronne, disconnected,
-Filchner, disconnected,
-Larsen D,connected,
-Larsen C,connected,
-Larsen B, connected,
+Nivl, connected,, NEED SEAL
+Vigrid, connected,, NEED SEAL
+Atka, likely disconnected, (Hoppman et al. 2015) and (McIntyre et al. 2013), Seal and MicroCAT data show surface freezing temperature water beneath the ice shelf and at entrance
+Jelbart, unknown,,
+Ronne, disconnected, (Nicholls et al. 2001),
+Filchner, disconnected, (Nicholls et al. 2001),
+Larsen D, likely disconnected, (Nicholls et al. 2012), By proximity to Larsen C
+Larsen C, likely disconnected, (Nicholls et al. 2012),
+Larsen B, unknown,,

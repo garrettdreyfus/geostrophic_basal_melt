@@ -40,7 +40,7 @@ def gprime(heat_function,hub,shelf_key=None,lat=None,lon=None,debug=False):
     ti = moving_average(ti,50)
     si = moving_average(si,50)
 
-    dizi = np.abs(np.diff(di)/np.diff(zi))
+    dizi = np.diff(di)/np.diff(zi)
     thresh = np.quantile(dizi,0.85)
     zpyc = np.mean(zi[1:][dizi>thresh])
     zpyci = np.argmin(np.abs(zi-zpyc))
@@ -52,6 +52,7 @@ def gprime(heat_function,hub,shelf_key=None,lat=None,lon=None,debug=False):
 
     if debug:
         fig,(ax1,ax2) = plt.subplots(1,2)
+        print(gprime_ext)
         ax1.plot(di,-zi)
         ax1.axhline(y=-zpyc,color="red",label="pyc")
         ax1.axhline(y=-hub,color="blue",label="hub")
@@ -68,7 +69,7 @@ def gprime(heat_function,hub,shelf_key=None,lat=None,lon=None,debug=False):
 
 def pycnocline(heat_function,hub,shelf_key=None,lat=None,lon=None,debug=False):
     hub = np.abs(hub)
-    zi = np.arange(0,1500,1)
+    zi = np.arange(5,1500,1)
     ti = moving_average(heat_function[0](zi),50)
     si = moving_average(heat_function[1](zi),50)
     zi = moving_average(zi,50)
@@ -76,21 +77,21 @@ def pycnocline(heat_function,hub,shelf_key=None,lat=None,lon=None,debug=False):
     di = gsw.rho(si,ti,zi)
     dizi = np.diff(di)/np.diff(zi)
     thresh = np.quantile(dizi,0.85)
-    zpyc = np.mean(zi[1:][dizi>thresh])
+    zpyc = np.median(zi[1:][dizi>thresh])
     zpyci = np.argmin(np.abs(zi-zpyc))
     deltaH = -(zpyc)+(hub)
 
-    if debug:
-        fig,(ax1,ax2) = plt.subplots(1,2)
-        ax1.plot(ti,-zi)
-        ax2.plot(ti,-zi)
-        ax1.axhline(y=-hub,color="blue",label="HUB")
-        ax1.legend()
-        plt.title(str(round(lat,1))+" , "+str(round(lon,1)))
-        plt.show()
+    if debug :
+        # fig,(ax1,ax2) = plt.subplots(1,2)
+        # ax1.plot(ti,-zi)
+        # ax2.plot(ti,-zi)
+        # ax1.axhline(y=-hub,color="blue",label="HUB")
+        # ax1.legend()
+        # plt.title(str(round(lat,1))+" , "+str(round(lon,1)))
+        # plt.show()
 
         fig,(ax1,ax2) = plt.subplots(1,2)
-        ax1.plot(di,-zi)
+        ax1.plot(gsw.rho(si,ti,100),-zi)
         ax1.axhline(y=-zpyc,color="red",label="Pycnocline")
         ax1.axhline(y=-hub,color="blue",label="HUB")
         ax2.plot(ti,-zi)
@@ -395,7 +396,7 @@ def slope_by_shelf(bedmach,polygons):
     GLIBmach.values[:] = bedmach.surface.values[:]-bedmach.thickness.values[:]
     GLIBmach.values[np.logical_or(bedmach.icemask_grounded_and_shelves==0,np.isnan(bedmach.icemask_grounded_and_shelves))]=np.nan
     GLIBmach = GLIBmach.rio.write_crs("epsg:3031")
-    del GLIBmach.attrs['grid_mapping']
+    # del GLIBmach.attrs['grid_mapping']
     GLIBmach.rio.to_raster("data/glibmach.tif")
     glib_by_shelf = {}
     full_info = {}
@@ -428,18 +429,18 @@ def slope_by_shelf(bedmach,polygons):
             X=X[~np.isnan(clipped)]
             Y=Y[~np.isnan(clipped)]
             #result = rbf(np.asarray([X,Y]).T,clipped[~np.isnan(clipped)],smoothing=150,neighbors=100)(np.asarray([X,Y]).T)
-            clippedmag = np.nanmax(np.abs(clipped))*max(np.nanmax(X),np.nanmax(Y))
-            if np.sum(~np.isnan(clipped))>7500:
-                clipped[~np.isnan(clipped)] = sbs(X[::2],Y[::2],clipped[~np.isnan(clipped)][::2]/clippedmag,kx=5,ky=5)(X,Y,grid=False)*clippedmag
-            else:
-                clipped[~np.isnan(clipped)] = sbs(X,Y,clipped[~np.isnan(clipped)]/clippedmag,kx=5,ky=5)(X,Y,grid=False)*clippedmag
+            # clippedmag = np.nanmax(np.abs(clipped))*max(np.nanmax(X),np.nanmax(Y))
+            # if np.sum(~np.isnan(clipped))>7500:
+                # clipped[~np.isnan(clipped)] = sbs(X[::2],Y[::2],clipped[~np.isnan(clipped)][::2]/clippedmag,kx=5,ky=5)(X,Y,grid=False)*clippedmag
+            # else:
+                # clipped[~np.isnan(clipped)] = sbs(X,Y,clipped[~np.isnan(clipped)]/clippedmag,kx=5,ky=5)(X,Y,grid=False)*clippedmag
             dx = np.diff(clipped,axis=0)[:,:-1]
             dy = np.diff(clipped,axis=1)[:-1,:]
                 
             glib_by_shelf[k] = np.nanmean(np.sqrt((dx/500)**2 + (dy/500)**2))
-            #if k == "Nansen":
-                #plt.imshow(clipped)
-                #plt.show()
+            if k == "Cosgrove":
+                plt.imshow(np.sqrt((dx/500)**2 + (dy/500)**2))
+                plt.show()
             #flatclipped=clipped[~np.isnan(clipped)]
             #A = np.vstack([X,Y, np.ones(len(X))]).T
             #m1,m2, c = np.linalg.lstsq(A, flatclipped, rcond=None)[0]
