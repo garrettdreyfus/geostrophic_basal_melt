@@ -21,7 +21,7 @@ createWOA = False
 createGISS = False
 createClosestShelfPoints = False
 createClosestHydro = False
-createQuants = False
+createQuants = True
 createSlopes = False
 createVolumes = False
 
@@ -146,18 +146,15 @@ with open("data/new_slopes_by_shelf.pickle","rb") as f:
 #salts,raw_temps,hubheats,cdwdepths,gprimes = cdw.parameterization_quantities(bedmach,grid,physical,hubs,closest_hydro,sal,temp,shelf_keys,quant="hubheat",debug=False)
 #with open("data/stats_kitkaboodle.pickle","wb") as f:
     #pickle.dump((salts,raw_temps,hubheats,cdwdepths,gprimes),f)
-# if createQuants:
-#     #for i in range(len(closest_points)):
-#         #closest_hydro[i] = 109752
-#     _,_,hubheats,cdwdepths,gprimes = cdw.parameterization_quantities(bedmach,grid,physical,hubs,closest_hydro,sal,temp,shelf_keys,quant="hubheat",debug=False)
-#     with open("data/stats_woa.pickle","wb") as f:
-#         pickle.dump((hubheats,cdwdepths,gprimes),f)
-# with open("data/stats_kitkaboodle.pickle","rb") as f:
-#     (salts,raw_temps,hubheats,cdwdepths,gprimes) = pickle.load(f)
+if createQuants:
+    out = cdw.parameterization_quantities(bedmach,grid,physical,hubs,closest_hydro,sal,temp,shelf_keys,quant="hubheat",debug=False)
+    with open("data/new_stats_woa.pickle","wb") as f:
+        pickle.dump(out,f)
+with open("data/new_stats_woa.pickle","rb") as f:
+    (salts,raw_temps,hubheats,cdwdepths,gprimes) = pickle.load(f)
     
-salts,raw_temps,hubheats,cdwdepths,gprimes = cdw.parameterization_quantities(bedmach,grid,physical,hubs,closest_hydro,sal,temp,shelf_keys,quant="hubheat",debug=False)
 
-cdwdepths[cdwdepths<0]=0
+# cdwdepths[cdwdepths<0]=0
 
 # with open("data/stats_woa.pickle","rb") as f:
 #     (hubheats,cdwdepths,gprimes) = pickle.load(f)
@@ -175,7 +172,6 @@ with open("data/volumes_by_shelf.pickle","rb") as f:
 
 
 #calculate 1/f
-print("hello")
 projection = pyproj.Proj("epsg:3031")
 fs = []
 for x,y in physical:
@@ -185,6 +181,7 @@ for x,y in physical:
 with open("data/polyna_by_shelf_2024.pickle","rb") as f:
     polyna_by_shelf,polyna_by_shelf_weighted = pickle.load(f)
 
+cdwdepths[cdwdepths<0] = 1
 
 #Sort points by shelf for averaging
 fs_by_shelf = bt.shelf_sort(shelf_keys,fs)
@@ -197,11 +194,11 @@ gprimes_by_shelf = bt.shelf_sort(shelf_keys,gprimes)
 hubs_by_shelf = bt.shelf_sort(shelf_keys,hubs)
 rignot_shelf_massloss,shelf_areas,sigmas_by_shelf =  cdw.extract_adusumilli("data/Adusumilli.csv")
 
-#front_thick = bt.front_thickness(bedmach,polygons)
-#with open("data/front_thick_by_shelf.pickle","wb") as f:
-    #pickle.dump(front_thick,f)
+# front_thick, front_depth = bt.front_thickness(bedmach,polygons)
+# with open("data/front_thick_by_shelf.pickle","wb") as f:
+#     pickle.dump((front_thick,front_depth),f)
 with open("data/front_thick_by_shelf.pickle","rb") as f:
-    front_thick = pickle.load(f)
+    front_thick, front_depth = pickle.load(f)
 
 
 #dump_volume_by_shelf = bt.dump_volume(bedmach,polygons)
@@ -216,6 +213,7 @@ thermals=[]
 cdws = []
 hubshelf=[]
 entrance_thickness=[]
+entrance_spread=[]
 polynas = []
 polynas_weighted = []
 gprimes=[]
@@ -245,10 +243,10 @@ for k in slopes_by_shelf.keys():
         gprimes.append(np.nanmean(gprimes_by_shelf[k],axis=0))
         hubshelf.append(np.nanmean(hubs_by_shelf[k]))
         gldepths.append(np.nanmean(depths_by_shelf[k]))
-        entrance_thickness.append(np.nanmean(np.abs(hubs_by_shelf[k]))- np.nanmean(np.asarray(front_thick[k])))
+        entrance_thickness.append(np.nanmean(np.abs(hubs_by_shelf[k]))- np.nanmean(np.abs(np.asarray(front_thick[k]))))
+        entrance_spread.append(np.std(front_depth[k])*4)
         #hubshelf.append(np.nanmean(np.abs(hubs_by_shelf[k])))
         polynas.append(np.nansum(polyna_by_shelf[k]))
-        polynas_weighted.append(np.nanmean(polyna_by_shelf_weighted[k]))
         salts.append(np.nanmean(salts_by_shelf[k]))
         raw_temps.append(np.nanmean(raw_temps_by_shelf[k]))
         if k == "Amery":
@@ -272,6 +270,7 @@ volumes = np.asarray(volumes)[:,0]
 dump_volumes = np.asarray(dump_volumes)[:,0]
 gprimes = np.asarray(gprimes)[:,0]
 hubshelf = np.asarray(hubshelf)
+entrance_spread = np.asarray(entrance_spread)
 salts = np.asarray(salts)
 gldepths = np.asarray(gldepths)
 raw_temps = np.asarray(raw_temps)
@@ -281,9 +280,10 @@ print("NEGATIVES",(cdws<0).sum())
 for i in range(len(cdws)):
     if cdws[i]<0:
         print(labels[i])
-ipdb.set_trace()
 print("-"*10)
-# cdws[cdws<0]=100
+
+#cdws[cdws<0]=np.nan
+
 fs = np.asarray(fs)[:,0]
 thermals = np.asarray(thermals)[:,0]
 mys = np.asarray(mys)
@@ -293,7 +293,12 @@ sorti = np.argsort(polynas)[::-1]
 gigatonconv = 10**(-12)
 rhoi=910
 scalefactor = rhoi*gigatonconv*10**6
-B0 = (mys*areas*scalefactor-polynas)/1027*9.8*(7.8*10**(-4))
+meltflux = mys*(1/(60*60*24*365))*(920.0)
+
+B0 = 34.5*(1/(60*60*24*365))*(920.0)*(mys*areas*10**6-polynas)/1027*9.8*(7.8*10**(-4))
+#B0 = (mys*areas-polynas)
+
+
 
 def read_shelf_class(labels):
     shelf_class = pd.read_csv("shelf_classification.csv",sep=',')
@@ -330,15 +335,18 @@ def read_shelf_class(labels):
         else:
             shelf_color.append('white')
             shelf_classnumber.append(np.nan)
-    return shelf_classnumber 
+    return shelf_classnumber,shelf_color
             
 #meanfris = np.mean(ratio[Ronnei] + ratio[Filchneri])
 #ratio[Ronnei]=0
 #ratio[Filchneri]=0
 
-shelf_classnumber = read_shelf_class(labels)
+shelf_classnumber,shelf_color = read_shelf_class(labels)
 
-pf.clean(cdws,salts,raw_temps,thermals,gprimes,slopes,dump_volumes,fs,areas,gldepths,entrance_thickness,mys,sigmas,labels,polynas,polynas_weighted,shelf_classnumber,colorthresh=5,textthresh=5)
+# pf.shelf_class_fig(shelf_classnumber,labels,sigmas,areas,scalefactor,shelf_color,B0)
+# pf.param_vs_coldmelt_fig(cdws,salts,raw_temps,thermals,gprimes,slopes,volumes,fs,areas,gldepths,hubshelf,mys,sigmas,labels,polynas,polynas_weighted,shelf_classnumber)
+pf.clean(cdws,salts,raw_temps,thermals,gprimes,entrance_spread,slopes,dump_volumes,fs,areas,gldepths,entrance_thickness,mys,sigmas,labels,polynas,polynas_weighted,shelf_classnumber,colorthresh=5,textthresh=5)
+
 pf.cleanlog(cdws,salts,raw_temps,thermals,gprimes,slopes,dump_volumes,fs,areas,gldepths,entrance_thickness,mys,sigmas,labels,polynas,polynas_weighted,shelf_classnumber,colorthresh=5,textthresh=5)
 #pf.param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=30,ylim=30,textthresh=0,colorthresh=5,colorfield=list(np.log10(ratio)))
 thermals =np.asarray(thermals)

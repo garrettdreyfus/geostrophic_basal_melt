@@ -1,6 +1,7 @@
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 import shapely
+import pdb
 import matplotlib.pyplot as plt
 import matplotlib
 import numpy as np
@@ -17,7 +18,7 @@ from matplotlib import collections  as mc
 from functools import partial
 from tqdm.contrib.concurrent import process_map
 from scipy import ndimage
-from scipy.ndimage import binary_dilation as bd, label, gaussian_filter 
+from scipy.ndimage import binary_dilation as bd, binary_erosion as be, label, gaussian_filter 
 from scipy.io import savemat
 from scipy.signal import convolve2d
 import rioxarray as riox
@@ -30,7 +31,7 @@ def moving_average(x, w):
 
 def gprime(heat_function,hub,shelf_key=None,lat=None,lon=None,debug=False):
     hub = np.abs(hub)
-    zi = np.arange(5,1500,1)
+    zi = np.arange(5,hub+50,1)
     ti = heat_function[0](zi)
     si = heat_function[1](zi)
     di = gsw.rho(si,ti,zi)
@@ -69,19 +70,20 @@ def gprime(heat_function,hub,shelf_key=None,lat=None,lon=None,debug=False):
 
 def pycnocline(heat_function,hub,shelf_key=None,lat=None,lon=None,debug=False):
     hub = np.abs(hub)
-    zi = np.arange(5,1500,1)
-    ti = moving_average(heat_function[0](zi),50)
-    si = moving_average(heat_function[1](zi),50)
+    zi = np.arange(1,hub,1)
+    di = gsw.rho(heat_function[1],heat_function[0],zi)
+    ti = moving_average(heat_function[0],50)
+    si = moving_average(heat_function[1],50)
+    di = moving_average(di,50)
     zi = moving_average(zi,50)
 
-    di = gsw.rho(si,ti,zi)
-    dizi = np.diff(di)/np.diff(zi)
+    dizi = np.abs(np.diff(di)/np.diff(zi))
     thresh = np.quantile(dizi,0.85)
-    zpyc = np.median(zi[1:][dizi>thresh])
+    zpyc = np.mean(zi[1:][dizi>thresh])
     zpyci = np.argmin(np.abs(zi-zpyc))
     deltaH = -(zpyc)+(hub)
 
-    if debug :
+    if debug and shelf_key=="Wilkins":
         # fig,(ax1,ax2) = plt.subplots(1,2)
         # ax1.plot(ti,-zi)
         # ax2.plot(ti,-zi)
@@ -378,27 +380,31 @@ def parameterization_quantities(bedmap,grid,physical,baths,closest_hydro,sal,tem
                     s = gsw.SA_from_SP(s,d,lon,lat)
                     #FOR MIMOC MAKE PT
                     #t = gsw.CT_from_pt(s,t)
-                    t = gsw.CT_from_t(s,t,d)
+                    t = gsw.CT_from_pt(s,t)#,d)
                     tinterp,sinterp = interpolate.interp1d(d,np.asarray(t)),interpolate.interp1d(d,np.asarray(s))
+                    zi = np.arange(1,abs(baths[l]),1)
+                    ti = np.interp(zi,d,np.asarray(t))
+                    si = np.interp(zi,d,np.asarray(s))
                     if np.isnan(t[11:]).all():
                         heats[timestep,l]=np.nan#
                     elif np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
-                        cdws[timestep,l]=pycnocline((tinterp,sinterp),baths[l],shelf_key=shelves[l],lat=lat,lon=lon)
+                        cdws[timestep,l]=pycnocline((ti,si),baths[l],shelf_key=shelves[l],lat=lat,lon=lon)
                         gprimes[timestep,l]=gprime((tinterp,sinterp),baths[l],shelf_key=shelves[l],lat=lat,lon=lon)
                         raw,heat = heat_content((tinterp,sinterp),500,1000)
                         heats[timestep,l]=heat
                         raw_temp[timestep,l]=raw
-                        salts[timestep,l]=salt_content((tinterp,sinterp),500,1000)
+                        salts[timestep,l]=salt_content((tinterp,sinterp),300,300)
     return salts,raw_temp,heats,cdws,gprimes
 
 def slope_by_shelf(bedmach,polygons):
     GLIBmach = bedmach.thickness.copy(deep=True)
     GLIBmach.values[:] = bedmach.surface.values[:]-bedmach.thickness.values[:]
+    # GLIBmach.values[:] = gaussian_filter(bedmach.surface.values[:]-bedmach.thickness.values[:],5)
     GLIBmach.values[np.logical_or(bedmach.icemask_grounded_and_shelves==0,np.isnan(bedmach.icemask_grounded_and_shelves))]=np.nan
     GLIBmach = GLIBmach.rio.write_crs("epsg:3031")
     # del GLIBmach.attrs['grid_mapping']
     GLIBmach.rio.to_raster("data/glibmach.tif")
-    glib_by_shelf = {}
+    slope_by_shelf = {}
     full_info = {}
     for k in tqdm(polygons.keys()):
         raster = riox.open_rasterio('data/glibmach.tif')
@@ -421,35 +427,39 @@ def slope_by_shelf(bedmach,polygons):
         label_im, nb_labels = label(~np.isnan(clipped))
         sizes = ndimage.sum(~np.isnan(clipped), label_im, range(nb_labels + 1))
         labels = np.asarray(range(nb_labels+1))
-        clipped[label_im!=labels[np.argmax(sizes)]] = np.nan
+        largemask = label_im==labels[np.argmax(sizes)]
+        # largemask = be(largemask,iterations=2)
+        clipped[~largemask] = np.nan
         if np.sum(~np.isnan(clipped))<100:
-            glib_by_shelf[k]=np.nan
+            slope_by_shelf[k]=np.nan
         else:
             X,Y = np.meshgrid(range(np.shape(clipped)[1]),range(np.shape(clipped)[0]))
-            X=X[~np.isnan(clipped)]
-            Y=Y[~np.isnan(clipped)]
+            X=X[~np.isnan(clipped)]/np.nanmax(X)
+            Y=Y[~np.isnan(clipped)]/np.nanmax(Y)
             #result = rbf(np.asarray([X,Y]).T,clipped[~np.isnan(clipped)],smoothing=150,neighbors=100)(np.asarray([X,Y]).T)
-            # clippedmag = np.nanmax(np.abs(clipped))*max(np.nanmax(X),np.nanmax(Y))
+            # clippedmag = np.nanmax(np.abs(clipped))#*max(np.nanmax(X),np.nanmax(Y))
             # if np.sum(~np.isnan(clipped))>7500:
-                # clipped[~np.isnan(clipped)] = sbs(X[::2],Y[::2],clipped[~np.isnan(clipped)][::2]/clippedmag,kx=5,ky=5)(X,Y,grid=False)*clippedmag
+            #     clipped[~np.isnan(clipped)] = sbs(X[::2],Y[::2],clipped[~np.isnan(clipped)][::2]/clippedmag,kx=3,ky=3)(X,Y,grid=False)*clippedmag
             # else:
-                # clipped[~np.isnan(clipped)] = sbs(X,Y,clipped[~np.isnan(clipped)]/clippedmag,kx=5,ky=5)(X,Y,grid=False)*clippedmag
+            #     clipped[~np.isnan(clipped)] = sbs(X,Y,clipped[~np.isnan(clipped)]/clippedmag,kx=3,ky=3)(X,Y,grid=False)*clippedmag
             dx = np.diff(clipped,axis=0)[:,:-1]
             dy = np.diff(clipped,axis=1)[:-1,:]
-                
-            glib_by_shelf[k] = np.nanmean(np.sqrt((dx/500)**2 + (dy/500)**2))
-            if k == "Cosgrove":
+            dx, dy = np.gradient(clipped)
+            if k == "Wilkins":
                 plt.imshow(np.sqrt((dx/500)**2 + (dy/500)**2))
-                plt.show()
-            #flatclipped=clipped[~np.isnan(clipped)]
-            #A = np.vstack([X,Y, np.ones(len(X))]).T
-            #m1,m2, c = np.linalg.lstsq(A, flatclipped, rcond=None)[0]
-            #m1=np.abs(m1/500)
-            #m2=np.abs(m2/500)
-            #glib_by_shelf[k] = np.sqrt(m1**2+m2**2)
+                plt.show()    
+            slope_by_shelf[k] = np.nanmean(np.sqrt((dx/500)**2 + (dy/500)**2))
+            
+            # flatclipped=clipped[~np.isnan(clipped)]
+            # scalefactor = np.max(clipped[~np.isnan(clipped)])
+            # A = np.vstack([X,Y, np.ones(len(X))]).T
+            # m1,m2, c = np.linalg.lstsq(A, flatclipped/scalefactor, rcond=None)[0]
+            # m1=np.abs(scalefactor*m1/500)
+            # m2=np.abs(scalefactor*m2/500)
+            # slope_by_shelf[k] = np.sqrt(m1**2+m2**2)
     plt.show()
 
-    return glib_by_shelf
+    return slope_by_shelf
 
 def extract_drafts(bedmach,polygons):
     GLIBmach = bedmach.thickness.copy(deep=True)

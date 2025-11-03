@@ -1,4 +1,5 @@
 import shapefile
+import ipdb
 import sys
 import copy
 import numpy as np
@@ -109,6 +110,13 @@ def closest_shelf(coord,polygons,min_dist=1000):
             closestname = k
             closestpolygon = v[0]
     return closestname, closestpolygon, min_dist
+
+def closest_shelves(coord,polygons,threshold):
+    closestname = None
+    closestpolygon = None
+    dists = np.asarray(list(map(lambda a : a[1][0].distance(Point(coord)), polygons.items())))
+    shelves = np.asarray(list(map(lambda a : a[0], polygons.items())))
+    return shelves[dists<threshold]
 
 
 def get_line_points(shelf,polygons,debug=False,mode="grounding"):
@@ -244,7 +252,9 @@ def front_thickness(shelf,polygons):
     draft = shelf.surface.values-shelf.thickness.values
     front = np.logical_and(bd(np.isnan(icemask),iterations=1),(icemask==1))
     shelf_keys = []
+    thicknesses = []
     depths = []
+
     shelves = {}
 
     for i in tqdm(range(1,icemask.shape[0]-1)):
@@ -255,6 +265,8 @@ def front_thickness(shelf,polygons):
                     if draft[i,j]==0:
                         print("feck")
                     shelf_keys.append(cn)
-                    depths.append(abs(draft[i,j]))
-    depth_thicknesses_by_shelf = shelf_sort(shelf_keys,depths)
-    return depth_thicknesses_by_shelf
+                    thicknesses.append(abs(draft[i,j]))
+                    depths.append(abs(beddepth[i,j]))
+    front_thicknesses_by_shelf = shelf_sort(shelf_keys,thicknesses)
+    bed_depths_by_shelf = shelf_sort(shelf_keys,depths)
+    return front_thicknesses_by_shelf, bed_depths_by_shelf 
