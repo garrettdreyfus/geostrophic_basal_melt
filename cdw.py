@@ -23,8 +23,9 @@ from scipy.io import savemat
 from scipy.signal import convolve2d
 import rioxarray as riox
 import rasterio
-import pdb
+import ipdb
 from scipy.interpolate import SmoothBivariateSpline as sbs
+
 
 def moving_average(x, w):
     return np.convolve(x, np.ones(w), 'valid') / w
@@ -396,10 +397,10 @@ def parameterization_quantities(bedmap,grid,physical,baths,closest_hydro,sal,tem
                         salts[timestep,l]=salt_content((tinterp,sinterp),300,300)
     return salts,raw_temp,heats,cdws,gprimes
 
-def slope_by_shelf(bedmach,polygons):
+def slope_by_shelf(bedmach,polygons,method = "simple"):
     GLIBmach = bedmach.thickness.copy(deep=True)
     GLIBmach.values[:] = bedmach.surface.values[:]-bedmach.thickness.values[:]
-    # GLIBmach.values[:] = gaussian_filter(bedmach.surface.values[:]-bedmach.thickness.values[:],5)
+    # GLIBmach.values[:] = gaussian_filter(bedmach.surface.values[:]-bedmach.thickness.values[:],2)
     GLIBmach.values[np.logical_or(bedmach.icemask_grounded_and_shelves==0,np.isnan(bedmach.icemask_grounded_and_shelves))]=np.nan
     GLIBmach = GLIBmach.rio.write_crs("epsg:3031")
     # del GLIBmach.attrs['grid_mapping']
@@ -428,35 +429,68 @@ def slope_by_shelf(bedmach,polygons):
         sizes = ndimage.sum(~np.isnan(clipped), label_im, range(nb_labels + 1))
         labels = np.asarray(range(nb_labels+1))
         largemask = label_im==labels[np.argmax(sizes)]
-        # largemask = be(largemask,iterations=2)
+        largemask = be(largemask,iterations=2)
         clipped[~largemask] = np.nan
         if np.sum(~np.isnan(clipped))<100:
             slope_by_shelf[k]=np.nan
         else:
             X,Y = np.meshgrid(range(np.shape(clipped)[1]),range(np.shape(clipped)[0]))
-            X=X[~np.isnan(clipped)]/np.nanmax(X)
-            Y=Y[~np.isnan(clipped)]/np.nanmax(Y)
-            #result = rbf(np.asarray([X,Y]).T,clipped[~np.isnan(clipped)],smoothing=150,neighbors=100)(np.asarray([X,Y]).T)
-            # clippedmag = np.nanmax(np.abs(clipped))#*max(np.nanmax(X),np.nanmax(Y))
+            if method == "simple":
+                # dx = np.diff(clipped,axis=0)[:,:-1]
+                # dy = np.diff(clipped,axis=1)[:-1,:]
+                dx, dy = np.gradient(clipped)
+                # if k in ["Shackleton","Cook"]:
+                    # plt.imshow(np.sqrt((dx/500)**2 + (dy/500)**2))
+                    # plt.show()    
+                slope_by_shelf[k] = np.nanmedian(np.sqrt((dx/500)**2 + (dy/500)**2))
+            if method == "smoothed":
+                clippedmag = np.nanmax(np.abs(clipped))#*max(np.nanmax(X),np.nanmax(Y))
+                Xflat = X[~np.isnan(clipped)]
+                Yflat = Y[~np.isnan(clipped)]
+                # clipped[~np.isnan(clipped)] = sbs(X[::2],Y[::2],clipped[~np.isnan(clipped)][::2]/clippedmag,kx=1,ky=1)(X,Y,grid=False)*clippedmag
+                res = 1
+                if len(Xflat)>1000:
+                    res = 2
+                spline = sbs(Xflat[::res],Yflat[::res],clipped[~np.isnan(clipped)][::res]/clippedmag,kx=3,ky=3)
+                dsplinex = spline.partial_derivative(1,0)
+                dspliney = spline.partial_derivative(0,1)
+                out = np.sqrt(dsplinex(X,Y,grid=False)**2 + dspliney(X,Y,grid=False)**2)
+                out[np.isnan(clipped)] = np.nan
+                out_raw = spline(X,Y,grid=False)
+                out_raw[np.isnan(clipped)] = np.nan
+                if k in ["Shackleton","Cook"] and False:
+                    fig, (ax1,ax2) = plt.subplots(1,2)
+                    ax1.imshow(out_raw)
+                    ax2.imshow(out)
+                    plt.title(k)
+                    plt.show()    
+                slope_by_shelf[k] = np.nanmean(out*clippedmag)#np.nanmean(np.sqrt((dx/500)**2 + (dy/500)**2))
+                # slope_by_shelf[k] = np.nanmean(np.sqrt((dx/500)**2 + (dy/500)**2))
+            if method == "plane":
+                flatclipped=clipped[~np.isnan(clipped)]
+                scalefactor = np.max(np.abs(flatclipped))#*max(np.nanmax(X),np.nanmax(Y))
+                A = np.vstack([X[~np.isnan(clipped)]*500,Y[~np.isnan(clipped)]*500, np.ones(len(X[~np.isnan(clipped)]))]).T
+                m1,m2, c = np.linalg.lstsq(A, flatclipped, rcond=None)[0]
+                m1=np.abs(m1)
+                m2=np.abs(m2)
+
+                if k in ["Pine_Island"] or False:
+                    #plt.imshow(np.sqrt((dx/500)**2 + (dy/500)**2))
+                    print(k)
+                    plt.pcolormesh(X*500,Y*500,clipped)
+                    plt.colorbar()
+                    print(m1,m2)
+                    plt.show()    
+                slope_by_shelf[k] = np.sqrt(m1**2+m2**2)
+            if method == "stream":
+                dx = np.gradient(clipped,500,axis=1)[:,:-1]
+                dy = np.gradient(clipped,500,axis=0)[:-1,:]
+                ipdb.set_trace()
             # if np.sum(~np.isnan(clipped))>7500:
-            #     clipped[~np.isnan(clipped)] = sbs(X[::2],Y[::2],clipped[~np.isnan(clipped)][::2]/clippedmag,kx=3,ky=3)(X,Y,grid=False)*clippedmag
             # else:
             #     clipped[~np.isnan(clipped)] = sbs(X,Y,clipped[~np.isnan(clipped)]/clippedmag,kx=3,ky=3)(X,Y,grid=False)*clippedmag
-            dx = np.diff(clipped,axis=0)[:,:-1]
-            dy = np.diff(clipped,axis=1)[:-1,:]
-            dx, dy = np.gradient(clipped)
-            if k == "Wilkins":
-                plt.imshow(np.sqrt((dx/500)**2 + (dy/500)**2))
-                plt.show()    
-            slope_by_shelf[k] = np.nanmean(np.sqrt((dx/500)**2 + (dy/500)**2))
-            
-            # flatclipped=clipped[~np.isnan(clipped)]
-            # scalefactor = np.max(clipped[~np.isnan(clipped)])
-            # A = np.vstack([X,Y, np.ones(len(X))]).T
-            # m1,m2, c = np.linalg.lstsq(A, flatclipped/scalefactor, rcond=None)[0]
-            # m1=np.abs(scalefactor*m1/500)
-            # m2=np.abs(scalefactor*m2/500)
-            # slope_by_shelf[k] = np.sqrt(m1**2+m2**2)
+
+
     plt.show()
 
     return slope_by_shelf

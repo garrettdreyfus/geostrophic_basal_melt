@@ -21,6 +21,7 @@ dependencies = [
     "scikit-learn>=1.6.1",
     "scipy>=1.8.0",
     "shapely>=1.8.5",
+    "sympy>=1.14.0",
     "tqdm>=4.67.1",
     "xgrads>=0.2.6",
 ]

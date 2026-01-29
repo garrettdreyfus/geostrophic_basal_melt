@@ -23,6 +23,8 @@ from cdw import pycnocline
 from scipy.stats import pearsonr
 import ipdb
 import random
+from sympy import Symbol
+from sympy import solve,nsolve,re
 
 def grab_bottom(t,max_depth=500):
     tvalues = t.t_an.values
@@ -613,9 +615,13 @@ def masslossparam(cdws,thermals,gprimes,slopes,fs,areas,ccoef,cint,wcoef,wint,th
 
 def shelf_class_fig(shelf_classnumber,labels,sigmas,areas,scalefactor,shelf_color,B0):
     fig,ax=plt.subplots(1,1,figsize=(7,9))
+
     sortlist = np.argsort(np.asarray(shelf_classnumber))
     sorted_nums = list(np.asarray(shelf_classnumber)[sortlist])
     count=0
+
+    
+    ipdb.set_trace()
     for c in sorted(np.unique(shelf_classnumber)):
         categorymask = shelf_classnumber==c
         Bcat = B0[categorymask]
@@ -623,7 +629,7 @@ def shelf_class_fig(shelf_classnumber,labels,sigmas,areas,scalefactor,shelf_colo
         sortmask = np.argsort(Bcat)
         counts = range(count,count+np.sum(shelf_classnumber==c))
 
-        ax.errorbar(Bcat[sortmask],counts,xerr=np.asarray(sigmacat)[sortmask]*(1/(60*60*24*365))*(920.0)*areas[categorymask][sortmask]*(10**6)*34.5/1027*9.8*(7.8*10**(-4)),linestyle='',ecolor="darkgray",alpha=0.25)
+        ax.errorbar(Bcat[sortmask],counts,xerr=np.asarray(sigmacat)[sortmask]*(1/(60*60*24*365))*(920.0)*areas[categorymask][sortmask]*(10**6)*34.5/1027*9.8*(7.8*10**(-4)),linestyle='',ecolor="red",alpha=0.5,capsize=5)
         ax.scatter(Bcat[sortmask],counts,c=np.asarray(shelf_color)[categorymask][sortmask],zorder=2)
 
         labelstrunc = np.asarray(labels)[categorymask][sortmask]
@@ -652,9 +658,12 @@ def shelf_class_fig(shelf_classnumber,labels,sigmas,areas,scalefactor,shelf_colo
     ax.set_yticks([x1,x2,x3,x4,x5])
     ax.set_yticklabels(['disconnected','likely disconnected','unknown or both','likely connected','connected'])
     # ax.set_xlim(-0.0015,0.0015)
-    ax.set_xlabel("$B_{total}$")
+    ax.set_xlabel("$B_{total}$",fontsize=18)
     ax.axvline(x=0,linestyle='--',color='gray')
     fig.subplots_adjust(left=0.3)
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
+    plt.show()
     plt.savefig("/home/garrett/Downloads/b0class.svg")
     ipdb.set_trace()
 
@@ -716,7 +725,7 @@ def param_vs_coldmelt_fig(cdws,salts,raw_temps,thermals,gprimes,slopes,volumes,f
 
     rhoanom = (3.9**2)*(1/(abs(hubdepths)))*(rho0/9.8)*((2*np.abs(Btotal))/(np.sqrt(areas)))**(2/3)*np.sign(Btotal)
     rhoanom[Btotal<0] = np.nan
-    (beta,alpha) = gsw.CT_first_derivatives(salts,Tpolyna)
+    beta = gsw.beta(salts,-1.9)
     Spolyna = salts + rhoanom/beta
 
     Tf = gsw.CT_freezing(salts,np.abs(gldepths),0)
@@ -881,7 +890,7 @@ def param_vs_coldmelt_fig(cdws,salts,raw_temps,thermals,gprimes,slopes,volumes,f
 
 
 
-def cleanlog(cdws,salts,raw_temps,thermals,gprimes,slopes,volumes,fs,areas,gldepths,hubdepths,mys,sigmas,labels,polynas,polynas_weighted,shelf_class,colorthresh=5,textthresh=5):
+def cleanlog(cdws,salts,raw_temps,thermals,gprimes,front_spread,slopes,volumes,fs,areas,gldepths,hubdepths,mys,sigmas,labels,polynas,polynas_weighted,shelf_class,colorthresh=5,textthresh=5):
 
     areas = np.asarray(areas)
 
@@ -896,7 +905,8 @@ def cleanlog(cdws,salts,raw_temps,thermals,gprimes,slopes,volumes,fs,areas,gldep
     cmask = np.asarray(shelf_class)<0#0.0005
     cold_mys=np.asarray(mys)[cmask]
     glfreezing = (-1.8-gsw.CT_freezing(salts,np.abs(gldepths),0))
-    coldfull = slopes*(np.abs(hubdepths))*np.asarray(fs)*glfreezing*np.asarray(areas)#*gprimechapman#*glfreezing#*gprimechapman
+    # coldfull = slopes*(np.abs(hubdepths))*np.asarray(fs)*glfreezing*np.asarray(areas)#*gprimechapman#*glfreezing#*gprimechapman
+    coldfull = slopes*(np.abs(hubdepths))*np.asarray(fs)*np.asarray(areas)*(1/6)*glfreezing*np.sqrt(polynas)*front_spread#*gprimechapman#*glfreezing#*gprimechapman
     cold = coldfull[cmask]
     cold_xs = np.asarray(([cold])).reshape((-1, 1))
     cold_model = LinearRegression(fit_intercept=False).fit(np.log10(cold_xs), np.log10(cold_mys*areas[cmask]))
@@ -906,7 +916,10 @@ def cleanlog(cdws,salts,raw_temps,thermals,gprimes,slopes,volumes,fs,areas,gldep
     graymask = np.asarray(shelf_class)==0#0.0005
     graycold_xs = np.asarray(([coldfull[graymask]])).reshape((-1,1))
     graywarm_xs = np.asarray(([warmfull[graymask]])).reshape((-1,1))
-    gray_melts = (cold_model.predict(np.log10(graycold_xs)) + warm_model.predict(np.log10(graywarm_xs)))/2.0
+    if len(graycold_xs)>0:
+        gray_melts = (cold_model.predict(np.log10(graycold_xs)) + warm_model.predict(np.log10(graywarm_xs)))/2.0
+    else:
+        gray_melts = np.asarray([])
     gray_mys  = np.asarray(mys)[graymask]
 
     r2 = pearsonr(np.concatenate((gray_melts.flatten(),cold_melts.flatten(),warm_melts.flatten())),np.log10(np.concatenate((gray_mys.flatten()*areas[graymask],cold_mys.flatten()*areas[cmask],warm_mys.flatten()*areas[wmask])))).statistic**2
@@ -959,51 +972,67 @@ def cleanlog(cdws,salts,raw_temps,thermals,gprimes,slopes,volumes,fs,areas,gldep
     plt.yticks(fontsize=18)
     plt.show()
 
-def clean(cdws,salts,raw_temps,thermals,gprimes,front_spread,slopes,volumes,fs,areas,gldepths,hubdepths,mys,sigmas,labels,polynas,polynas_weighted,shelf_class,colorthresh=5,textthresh=5):
-
-    Ronnei = labels.index("Ronne")
-    Filchneri = labels.index("Filchner")
-
-    meanfrismelt = (mys[Ronnei]*areas[Ronnei]+mys[Filchneri]*areas[Filchneri])/(areas[Ronnei]+areas[Filchneri])
-    mys[Ronnei]=meanfrismelt
-    mys[Filchneri]=meanfrismelt
-
-    sumfrispolyna = polynas[Ronnei] + polynas[Filchneri]
-
-    sumfrisarea = areas[Ronnei]+areas[Filchneri]
-    areas[Ronnei]=sumfrisarea
-    areas[Filchneri]=sumfrisarea
-
-    meanslope = (slopes[Ronnei] + slopes[Filchneri])/2
-    slopes[Ronnei]=meanslope
-    slopes[Filchneri]=meanslope
-
-
-
+def clean(cdws,salts,raw_temps,thermals,gprimes,front_spread,h_min,h_max,slopes,volumes,fs,areas,gldepths,hubdepths,mys,sigmas,labels,polynas,polynas_weighted,shelf_class,colorthresh=5,textthresh=5):
+    rho0 = 1025
+    rhoi = 910
+    Cp = 4186
+    If = 334000
+    W0 =  100000
+ 
+    glfreezing = (-1.9-gsw.CT_freezing(salts,np.abs(gldepths)/2,0))/4
     # areas = np.asarray(areas)
-
+    areas = areas*(10**6)
     wmask = np.asarray((shelf_class))>0#0.0005
     warm_mys=np.asarray(mys)[wmask]
-    warmfull = np.asarray(cdws*np.asarray(thermals)*np.asarray(gprimes)*np.asarray(slopes)*np.asarray(fs))*np.asarray(areas)
+    warmfull = np.asarray(cdws*np.asarray(thermals)*(1/6)*np.asarray(gprimes)*np.asarray(slopes)*np.asarray(fs))*np.asarray(areas)
     warm = warmfull[wmask]
     warm_xs = np.asarray(([warm])).reshape((-1, 1))
     warm_model = LinearRegression(fit_intercept=False).fit(warm_xs, warm_mys*areas[wmask])
     warm_melts = warm_model.predict(warm_xs)
 
+
+    ######## cold g'
+    
+    rhomin,rhomax = (rho0/9.8)*((1/fs)*(polynas*(9.8/1027)))**(1/2)/(h_max),(rho0/9.8)*((1/fs)*(polynas))**(1/2)/(h_min)
+    rhomean = (rho0/9.8)*((1/fs)*(polynas))**(1/2)/(np.nanmean((h_max+h_min)/2))
+    stratterm = rhomax-rhomin
+
+    rho_s = gsw.beta(salts,-1.9,0)*rho0
+
+    Spolyna = salts + rhomean/rho_s
+    Tf = gsw.CT_freezing(salts,np.abs(gldepths)/2,0)
+    Tpolyna = -1.9
+    D = (1-(Cp/If)*(Tf-(Tpolyna))/4)
+    gprimes_cold = (9.8/1027)*(Spolyna*(1-1/D)*rho_s + (stratterm/6))
+
+
+
+    ##########3
+
     cmask = np.asarray(shelf_class)<0#0.0005
     cold_mys=np.asarray(mys)[cmask]
-    glfreezing = (-1.9-gsw.CT_freezing(salts,np.abs(gldepths),0))
-    coldfull = slopes*(np.abs(hubdepths))*np.asarray(fs)*glfreezing*np.asarray(areas)#*gprimechapman#*glfreezing#*gprimechapman
+    coldfull = slopes*(np.abs(hubdepths))*np.asarray(fs)*np.asarray(areas)*glfreezing*gprimes_cold#*gprimechapman#*glfreezing#*gprimechapman
     cold = coldfull[cmask]
     cold_xs = np.asarray(([cold])).reshape((-1, 1))
     cold_model = LinearRegression(fit_intercept=False).fit(cold_xs, cold_mys*areas[cmask])
     cold_melts = cold_model.predict(cold_xs)
 
+    warm_alpha =  (warm_model.coef_/((rho0*Cp)/(rhoi*If*W0)))/(364*24*60*60)
+    cold_alpha =  (cold_model.coef_/((rho0*Cp)/(rhoi*If*W0)))/(364*24*60*60)
+    print("warm alpha: ",warm_alpha)
+    print("cold alpha: ",cold_alpha)
+
+
+    ipdb.set_trace()
+
 
     graymask = np.asarray(shelf_class)==0#0.0005
     graycold_xs = np.asarray(([coldfull[graymask]])).reshape((-1,1))
     graywarm_xs = np.asarray(([warmfull[graymask]])).reshape((-1,1))
-    gray_melts = (cold_model.predict(graycold_xs) + warm_model.predict(graywarm_xs))/2.0
+    if len(graycold_xs)>0:
+        gray_melts = (cold_model.predict(graycold_xs) + warm_model.predict(graywarm_xs))/2.0
+    else:
+        gray_melts = np.asarray([])
     gray_mys  = np.asarray(mys)[graymask]
 
     r2 = pearsonr(np.concatenate((cold_melts.flatten(),warm_melts.flatten(),gray_melts.flatten())),np.concatenate((cold_mys.flatten()*areas[cmask],warm_mys.flatten()*areas[wmask],gray_mys.flatten()*areas[graymask]))).statistic**2
@@ -1011,7 +1040,7 @@ def clean(cdws,salts,raw_temps,thermals,gprimes,front_spread,slopes,volumes,fs,a
 
     rhoi = 910
     gigatonconv = 10**(-12)
-    scalefactor = rhoi*gigatonconv*10**6
+    scalefactor = rhoi*gigatonconv
 
     ax.scatter(warm_melts.flatten()*scalefactor,scalefactor*warm_mys*areas[wmask],c="red")
     ax.scatter(cold_melts.flatten()*scalefactor,scalefactor*cold_mys*areas[cmask],c="blue")
@@ -1070,6 +1099,7 @@ def clean_optimal(cdws,salts,raw_temps,thermals,gprimes,front_spread,slopes,volu
 
     maxr = 0
     max_shelf_class = []
+    r2s = []
     for i in tqdm(range(10000)):
         shelf_class = random.choices([-1,0,1],k=len(shelf_class))
         wmask = np.asarray((shelf_class))>0#0.0005
@@ -1097,9 +1127,13 @@ def clean_optimal(cdws,salts,raw_temps,thermals,gprimes,front_spread,slopes,volu
         gray_mys  = np.asarray(mys)[graymask]
 
         r2 = pearsonr(np.concatenate((cold_melts.flatten(),warm_melts.flatten(),gray_melts.flatten())),np.concatenate((cold_mys.flatten()*areas[cmask],warm_mys.flatten()*areas[wmask],gray_mys.flatten()*areas[graymask]))).statistic**2
+        r2s.append(r2)
         if r2>maxr:
             maxr=r2
             max_shelf_class = shelf_class
+
+    plt.hist(r2s,bins=20)
+    plt.show()
     shelf_class = max_shelf_class
     wmask = np.asarray((shelf_class))>0#0.0005
     warm_mys=np.asarray(mys)[wmask]
@@ -1169,3 +1203,227 @@ def clean_optimal(cdws,salts,raw_temps,thermals,gprimes,front_spread,slopes,volu
 
     plt.show()
 
+
+def breakdown_cold(cdws,salts,raw_temps,thermals,gprimes,front_spread,h_min,h_max,slopes,volumes,fs,areas,gldepths,hubdepths,mys,sigmas,labels,polynas,polynas_weighted,shelf_class,colorthresh=5,textthresh=5):
+    glfreezing = (gsw.CT_freezing(salts,0,0)-gsw.CT_freezing(salts,np.abs(gldepths)/2,0))/4
+
+    rho0 = 1025
+    rhoi = 910
+    Cp = 4186
+    If = 334000
+    W0 =  100000
+ 
+    # areas = np.asarray(areas)
+    areas = areas*(10**6)
+    wmask = np.asarray((shelf_class))>0#0.0005
+    warm_mys=np.asarray(mys)[wmask]
+    warmfull = np.asarray(cdws*np.asarray(thermals)*(1/6)*np.asarray(gprimes)*np.asarray(slopes)*np.asarray(fs))*np.asarray(areas)
+    warm = warmfull[wmask]
+    warm_xs = np.asarray(([warm])).reshape((-1, 1))
+    warm_model = LinearRegression(fit_intercept=False).fit(warm_xs, warm_mys*areas[wmask])
+    warm_melts = warm_model.predict(warm_xs)
+
+    cmask = np.asarray(shelf_class)<0#0.0005
+    cold_mys=np.asarray(mys)[cmask]
+    coldfull = slopes*(np.abs(hubdepths))*np.asarray(fs)*np.asarray(areas)*glfreezing*(np.sqrt(polynas)*front_spread)#*gprimechapman#*glfreezing#*gprimechapman
+    cold = coldfull[cmask]
+    cold_xs = np.asarray(([cold])).reshape((-1, 1))
+    cold_model = LinearRegression(fit_intercept=False).fit(cold_xs, cold_mys*areas[cmask])
+    cold_melts = cold_model.predict(cold_xs)
+
+    rhomin,rhomax = (rho0/9.8)*((1/fs)*(polynas*(9.8/1027)))**(1/2)/(h_max),(rho0/9.8)*((1/fs)*(polynas))**(1/2)/(h_min)
+    rhomean = (rho0/9.8)*((1/fs)*(polynas))**(1/2)/(np.nanmean((h_max+h_min)/2))
+    stratterm = rhomax-rhomin
+
+    rho_s = gsw.beta(salts,-1.9,0)*rho0
+
+    Spolyna = salts + rhomean/rho_s
+
+    Tf = gsw.CT_freezing(salts,np.abs(gldepths)/2,0)
+    Tpolyna = -1.9
+    D = (1-(Cp/If)*(Tf-(Tpolyna))/4)
+    gprimes_cold = (9.8/1027)*(Spolyna*(1-1/D)*rho_s + (stratterm/6))
+
+
+
+
+    bar_x = []
+    for k in range(len(labels)):
+        if cmask[k]:
+            bar_x.append(labels[k])
+    plt.close()
+    fig,((ax1,ax2),(ax3,ax4)) = plt.subplots(2,2)
+    ax1.bar(bar_x,np.asarray(hubdepths)[cmask])
+    ax1.set_title("H term")
+    ax2.bar(bar_x,np.asarray(glfreezing)[cmask])
+    ax2.set_title("Thermal term")
+    ax3.bar(bar_x,(gprimes_cold)[cmask])
+    ax3.set_title("g' term")
+    ax4.bar(bar_x,np.asarray(slopes)[cmask])
+    ax4.set_title("slope term")
+
+    ax1.tick_params(axis='x', labelrotation=45)
+    ax2.tick_params(axis='x', labelrotation=45)
+    ax3.tick_params(axis='x', labelrotation=45)
+    ax4.tick_params(axis='x', labelrotation=45)
+
+    plt.show()
+
+def clean_new(cdws,salts,raw_temps,thermals,gprimes,front_spread,h_min,h_max,slopes,volumes,fs,areas,gldepths,hubdepths,mys,sigmas,labels,polynas,polynas_weighted,shelf_class,colorthresh=5,textthresh=5):
+    rho0 = 1025
+    rhoi = 910
+    Cp = 4186
+    If = 334000
+    W0 =  100000
+ 
+    glfreezing = (-1.9-gsw.CT_freezing(salts,np.abs(gldepths)/2,0))/4
+    # areas = np.asarray(areas)
+    areas = areas*(10**6)
+    wmask = np.asarray((shelf_class))>0#0.0005
+    warm_mys=np.asarray(mys)[wmask]
+    warmfull = np.asarray(cdws*np.asarray(thermals)*(1/6)*np.asarray(gprimes)*np.asarray(slopes)*np.asarray(fs))*np.asarray(areas)
+    warm = warmfull[wmask]
+    warm_xs = np.asarray(([warm])).reshape((-1, 1))
+    warm_model = LinearRegression(fit_intercept=False).fit(warm_xs, warm_mys*areas[wmask])
+    warm_melts = warm_model.predict(warm_xs)
+
+    warm_alpha =  (warm_model.coef_/((rho0*Cp)/(rhoi*If*W0)))/(364*24*60*60)
+    # warm_alpha =  0.01/(364*24*60*60)
+
+    ######## cold g'
+
+
+    ##########3
+    coldfull = []
+    new_shelf_class = []
+
+    for i in range(len(salts)):
+        x = Symbol('x',real=True,positive=True)
+        meltflux = x*(1/(60*60*24*365))*(920.0)
+        Btotal = ((meltflux*areas[i]*34.5))/rho0*9.8*gsw.beta(34.5,-1.8,gldepths[i]/2)-polynas[i]
+
+        meltscalefactor = ((areas[i]*34.5))/rho0*9.8*gsw.beta(34.5,-1.8,gldepths[i]/2)
+        print(labels[i]," breakeven melt ",(24*60*60*365)/920*np.mean(polynas[i])/meltscalefactor, "warm melt: ",warmfull[i]*warm_alpha/areas[i])
+
+        rhomin,rhomax = (rho0/9.8)*((1/fs[i])*(Btotal*(9.8/1027)))**(1/2)/(h_max[i]),(rho0/9.8)*((1/fs[i])*(Btotal))**(1/2)/(h_min[i])
+        rhomean = (rho0/9.8)*((1/fs[i])*(Btotal))**(1/2)/(np.nanmean((h_max[i]+h_min[i])/2))
+        stratterm = rhomax-rhomin
+
+        rho_s = gsw.beta(salts[i],-1.9,0)*rho0
+
+        Spolyna = salts[i] + rhomean/rho_s
+        Tf = gsw.CT_freezing(salts[i],np.abs(gldepths[i])/2,0)
+        Tpolyna = -1.9
+        D = (1-(Cp/If)*(Tf-(Tpolyna))/4)
+        gprimes_cold = (9.8/1027)*(Spolyna*(1-1/D)*rho_s + (stratterm/6))
+
+        alpha = 1*((rho0*Cp)/(rhoi*If*W0))
+
+        solveexpr = x - (alpha/(60*60*24*365))*slopes[i]*((Tpolyna-Tf)/4)*hubdepths[i]*fs[i]
+        print(labels[i])
+        # print(((warmfull[i]*34.5))/rho0*9.8*(7.8*10**(-4))-polynas[i])
+        warmalpha = 0.16/((rho0*Cp)/(rhoi*If*W0))
+        try:
+            disconnectedmelt = float(re(nsolve(solveexpr,x,0)))*(60*60*24*365)
+        except:
+            disconnectedmelt = np.nan
+
+        
+        Bmelt = 34.5*((warmfull[i]*warm_alpha/areas[i])/(60*60*24*365))*920/rho0*9.8*(gsw.beta(34.5,-1.8,gldepths[i]/2))
+
+        if warmfull[i]*warm_alpha/areas[i]-(24*60*60*365)/920*np.mean(polynas[i])/meltscalefactor> 0:
+            connectedmelt = warmfull[i] * warm_alpha/areas[i]
+        else:
+            connectedmelt = np.nan
+
+        if labels[i] == "Getz":
+            ipdb.set_trace()
+        print(labels[i]," | disconnected: ", disconnectedmelt, " | connected: ",connectedmelt)
+        coldfull.append(disconnectedmelt)
+        if ~np.isnan(connectedmelt):
+            new_shelf_class.append(1)
+        else:
+            new_shelf_class.append(-1)
+
+    shelf_class = new_shelf_class
+    areas = areas*(10**6)
+    wmask = np.asarray((shelf_class))>0#0.0005
+    warm_mys=np.asarray(mys)[wmask]
+    warmfull = np.asarray(cdws*np.asarray(thermals)*(1/6)*np.asarray(gprimes)*np.asarray(slopes)*np.asarray(fs))*np.asarray(areas)
+    warm = warmfull[wmask]
+    warm_xs = np.asarray(([warm])).reshape((-1, 1))
+    warm_model = LinearRegression(fit_intercept=False).fit(warm_xs, warm_mys*areas[wmask])
+    warm_melts = warm_model.predict(warm_xs)
+
+    warm_alpha =  (warm_model.coef_/((rho0*Cp)/(rhoi*If*W0)))/(364*24*60*60)
+
+
+    cmask = np.asarray(shelf_class)<0#0.0005
+    cold_mys=np.asarray(mys)[cmask]
+    coldfull = np.asarray(coldfull)*areas
+    coldfull = slopes*(np.abs(hubdepths))*np.asarray(fs)*np.asarray(areas)*glfreezing#*gprimes_cold#*gprimechapman#*glfreezing#*gprimechapman
+    cold = coldfull[cmask]
+    cold_xs = np.asarray(([cold])).reshape((-1, 1))
+    cold_model = LinearRegression(fit_intercept=False).fit(cold_xs, cold_mys*areas[cmask])
+    cold_melts = cold_model.predict(cold_xs)
+
+    cold_alpha =  (cold_model.coef_/((rho0*Cp)/(rhoi*If*W0)))/(364*24*60*60)
+    print("warm alpha: ",warm_alpha)
+    print("cold alpha: ",cold_alpha)
+
+
+
+
+
+
+    graymask = np.asarray(shelf_class)==0#0.0005
+    graycold_xs = np.asarray(([coldfull[graymask]])).reshape((-1,1))
+    graywarm_xs = np.asarray(([warmfull[graymask]])).reshape((-1,1))
+    if len(graycold_xs)>0:
+        gray_melts = (cold_model.predict(graycold_xs) + warm_model.predict(graywarm_xs))/2.0
+    else:
+        gray_melts = np.asarray([])
+    gray_mys  = np.asarray(mys)[graymask]
+
+    r2 = pearsonr(np.concatenate((cold_melts.flatten(),warm_melts.flatten(),gray_melts.flatten())),np.concatenate((cold_mys.flatten()*areas[cmask],warm_mys.flatten()*areas[wmask],gray_mys.flatten()*areas[graymask]))).statistic**2
+    fig, ax = plt.subplots(1,1)
+
+    rhoi = 910
+    gigatonconv = 10**(-12)
+    scalefactor = rhoi*gigatonconv
+
+    ax.scatter(warm_melts.flatten()*scalefactor,scalefactor*warm_mys*areas[wmask],c="red")
+    ax.scatter(cold_melts.flatten()*scalefactor,scalefactor*cold_mys*areas[cmask],c="blue")
+    ax.scatter(gray_melts.flatten()*scalefactor,scalefactor*gray_mys*areas[graymask],c="gray")
+
+    cmaskin = np.cumsum(cmask)-1
+    wmaskin = np.cumsum(wmask)-1
+    graymaskin = np.cumsum(graymask)-1
+
+    sigmas = np.asarray(sigmas)
+    for k in range(len(labels)):
+        if cmask[k]:
+            text=plt.annotate(labels[k],(cold_melts.flatten()[cmaskin[k]]*scalefactor,(scalefactor*cold_mys*areas[cmask])[cmaskin[k]]))
+        elif wmask[k]:
+            text=plt.annotate(labels[k],(warm_melts.flatten()[wmaskin[k]]*scalefactor,(scalefactor*warm_mys*areas[wmask])[wmaskin[k]]))
+        elif graymask[k]:
+            text=plt.annotate(labels[k],(gray_melts.flatten()[graymaskin[k]]*scalefactor,(scalefactor*gray_mys*areas[graymask])[graymaskin[k]]))
+
+    markers, caps, bars = ax.errorbar(cold_melts.flatten()*scalefactor,scalefactor*cold_mys*areas[cmask],yerr=sigmas[cmask]*areas[cmask]*scalefactor,ls='none')
+    [bar.set_alpha(0.3) for bar in bars]                  
+    markers, caps, bars = ax.errorbar(warm_melts.flatten()*scalefactor,scalefactor*warm_mys*areas[wmask],yerr=sigmas[wmask]*areas[wmask]*scalefactor,ls='none')
+    [bar.set_alpha(0.3) for bar in bars]                  
+    markers, caps, bars = ax.errorbar(gray_melts.flatten()*scalefactor,scalefactor*gray_mys*areas[graymask],yerr=sigmas[graymask]*areas[graymask]*scalefactor,ls='none',ecolor="gray")
+    [bar.set_alpha(0.3) for bar in bars]
+
+    ax.text(.05, .95, '$r^2=$'+str(round(r2,2)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
+    ax.set_xlabel(r"$\dot{M}_{\mathrm{pred}} (Gt/yr)$",fontsize=24)
+    ax.set_ylabel(r'$\dot{M}_{\mathrm{obs}} (Gt/yr)$',fontsize=24)
+    # ax.set_xlim(0,140)
+    # ax.set_ylim(0,140)
+
+    plt.show()
+
+
+
+ 
