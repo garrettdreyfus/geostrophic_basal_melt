@@ -324,7 +324,7 @@ Bmelt = 34.5*(1/(60*60*24*365))*(920.0)*(mys*areas*10**6)/1027*9.8*(gsw.beta(34.
 Bpolyna = 34.5*(1/(60*60*24*365))*(920.0)*(polynas)/1027*9.8*(gsw.beta(34.5,-1.9,0))
 
 
-B0 = Bmelt-Bpolyna
+Btotal = (Bmelt-Bpolyna)
 #heat from melt
 # B0 -= mys*(1/(60*60*24*365))*areas*(10**6)*920*330000*(1/2000)*(gsw.alpha(34.5,-1.8,gldepths))/1027*9.8
 # Bmelt = mys*(1/(60*60*24*365))*areas*(10**6)*920*330000*(1/2000)*(gsw.alpha(34.5,-1.8,gldepths))/1027*9.8
@@ -373,48 +373,75 @@ def read_shelf_class(labels):
             shelf_classnumber.append(np.nan)
     return shelf_classnumber,shelf_color
             
-shelf_classnumber_B0 = []
-shelf_color_B0 = []
+shelf_classnumber_Btotal = []
+shelf_color_Btotal = []
 for i in range(len(labels)): 
-    if np.abs(B0[i]) < 0:
-        shelf_classnumber_B0.append(0)
-    elif B0[i] < 0:
-        shelf_classnumber_B0.append(-1)
-    elif B0[i] > 0:
-        shelf_classnumber_B0.append(1)
-print(shelf_classnumber_B0)
+    if np.abs(Btotal[i]) < 0:
+        shelf_classnumber_Btotal.append(0)
+    elif Btotal[i] < 0:
+        shelf_classnumber_Btotal.append(-1)
+    elif Btotal[i] > 0:
+        shelf_classnumber_Btotal.append(1)
+print(shelf_classnumber_Btotal)
 #meanfris = np.mean(ratio[Ronnei] + ratio[Filchneri])
 #ratio[Ronnei]=0
 #ratio[Filchneri]=0
 
 shelf_classnumber,shelf_color = read_shelf_class(labels)
 
-# ronnei = labels.index("Ronne")
-# filchneri = labels.index("Filchner")
-# B0[ronnei] = B0[ronnei] + B0[filchneri]
-# areas[ronnei] = areas[ronnei] + areas[filchneri]
-# sigmas[ronnei] = sigmas[ronnei] + sigmas[filchneri]
 
-# B0 = list(B0)
-# areas = list(areas)
-# sigmas = list(sigmas)
-# labels[ronnei]="Filchner-Ronne"
-# del shelf_color[filchneri]
-# del B0[filchneri]
-# del shelf_classnumber[filchneri]
-# del areas[filchneri]
-# del sigmas[filchneri]
-# del labels[filchneri]
+Bpolynahaid = 34.5*(1/(60*60*24*365))*(920.0)*(993*1000*1000*1000)/1027*9.8*(gsw.beta(34.5,-1.9,0))
+Bmelts = 34.5*(1/(60*60*24*365))*(920.0)*(mys*areas*10**6)/1027*9.8*(gsw.beta(34.5,-1.8,gldepths/2))
 
-# B0 = np.asarray(B0)
-# areas = np.asarray(areas)
-# sigmas = np.asarray(sigmas)
+Btotal[ronnei] = Bmelts[filchneri] + Bmelt[ronnei] - (Bpolyna[ronnei] + Bpolyna[filchneri])*10
+areas[ronnei] = areas[ronnei] + areas[filchneri]
+sigmas[ronnei] = sigmas[ronnei] + sigmas[filchneri]
 
 
-# # pf.shelf_class_fig(shelf_classnumber,labels,sigmas,areas,scalefactor,shelf_color,B0)
+ronnei = labels.index("Ronne")
+filchneri = labels.index("Filchner")
+Btotal = list(Btotal)
+areas = list(areas)
+sigmas = list(sigmas)
+labels[ronnei]="Filchner-Ronne (Haid et al. 2013)"
+del shelf_color[filchneri]
+del Btotal[filchneri]
+del shelf_classnumber[filchneri]
+del areas[filchneri]
+del sigmas[filchneri]
+del labels[filchneri]
+
+Btotal = np.asarray(Btotal)
+areas = np.asarray(areas)
+sigmas = np.asarray(sigmas)
+
+
+pf.shelf_class_fig(shelf_classnumber,labels,sigmas,areas,scalefactor,shelf_color,Btotal)
 #pf.param_vs_coldmelt_fig(cdws,salts,raw_temps,thermals,gprimes,slopes,volumes,fs,areas,gldepths,hubshelf,mys,sigmas,labels,polynas,polynas_weighted,shelf_classnumber)
-B0 = -B0
-pf.clean(cdws,salts,raw_temps,thermals,gprimes,gprimes,h_min,h_max,slopes,dump_volumes,fs,areas,gldepths,entrance_thickness,mys,sigmas,labels,B0,polynas_weighted,shelf_classnumber_B0,colorthresh=5,textthresh=5)
+Bpolyna = -Bpolyna
+shelf_stats = {
+    "cdws":cdws,
+    "salts":salts,
+    "raw_temps":raw_temps,
+    "Tcdw":thermals,
+    "gprimes":gprimes,
+    "h_min":h_min,
+    "h_max":h_max,
+    "slopes":slopes,
+    "dump_volumes":dump_volumes,
+    "fs-1":fs,
+    "areas":areas,
+    "gldepths":gldepths,
+    "entrance_thickness":entrance_thickness,
+    "mys":mys,
+    "sigmas":sigmas,
+    "labels":labels,
+    "Btotal":Btotal,
+    "Bpolyna":Bpolyna,
+    "shelf_class":shelf_classnumber_Btotal,
+}
+
+pf.clean(shelf_stats,colorthresh=5,textthresh=5)
 # pf.clean_new(cdws,salts,raw_temps,thermals,gprimes,entrance_spread,h_min,h_max,slopes,dump_volumes,fs,areas,gldepths,entrance_thickness,mys,sigmas,labels,Bpolyna,polynas_weighted,shelf_classnumber_B0,colorthresh=5,textthresh=5)
 # pf.breakdown_cold(cdws,salts,raw_temps,thermals,gprimes,entrance_spread,h_min,h_max,slopes,dump_volumes,fs,areas,gldepths,entrance_thickness,mys,sigmas,labels,B0,polynas_weighted,shelf_classnumber_B0,colorthresh=5,textthresh=5)
 
