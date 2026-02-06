@@ -23,6 +23,7 @@ createClosestShelfPoints = False
 createClosestHydro = False
 createQuants = False
 createSlopes = False
+createDrafts = False
 createVolumes = False
 
 ##################################################
@@ -137,6 +138,14 @@ if createSlopes:
 with open("data/slopes_by_shelf.pickle","rb") as f:
     slopes_by_shelf = pickle.load(f)
 
+# Generate drafts
+if createDrafts:
+    drafts_by_shelf = cdw.draft_by_shelf(bedmach,polygons)
+    with open("data/drafts_by_shelf.pickle","wb") as f:
+        pickle.dump(drafts_by_shelf,f)
+with open("data/drafts_by_shelf.pickle","rb") as f:
+    drafts_by_shelf = pickle.load(f)
+
 
 
 ################################################
@@ -204,7 +213,7 @@ raw_temps_by_shelf = bt.shelf_sort(shelf_keys,raw_temps)
 cdws_by_shelf = bt.shelf_sort(shelf_keys,cdwdepths)
 gprimes_by_shelf = bt.shelf_sort(shelf_keys,gprimes)
 hubs_by_shelf = bt.shelf_sort(shelf_keys,hubs)
-rignot_shelf_massloss,shelf_areas,sigmas_by_shelf =  cdw.extract_adusumilli("data/Adusumilli.csv")
+adusumilli_shelf_massloss,shelf_areas,sigmas_by_shelf =  cdw.extract_adusumilli("data/Adusumilli.csv")
 
 # front_thick, front_depth = bt.front_thickness(bedmach,polygons)
 # with open("data/front_thick_by_shelf.pickle","wb") as f:
@@ -213,18 +222,12 @@ with open("data/front_thick_by_shelf.pickle","rb") as f:
     front_thick, front_depth = pickle.load(f)
 
 
-#dump_volume_by_shelf = bt.dump_volume(bedmach,polygons)
-#with open("data/dump_volume_by_shelf.pickle","wb") as f:
-    #pickle.dump(dump_volume_by_shelf,f)
-with open("data/dump_volume_by_shelf.pickle","rb") as f:
-    dump_volume_by_shelf = pickle.load(f)
-
-
 # move data from shelf based dictionaries to vectorized arrays 
 thermals=[]
 cdws = []
 hubshelf=[]
 entrance_thickness=[]
+front_thicks=[]
 entrance_spread=[]
 h_min=[]
 h_max=[]
@@ -236,33 +239,34 @@ bars = []
 areas = []
 mys = []
 slopes = []
-volumes = []
 salts = []
 raw_temps = []
-dump_volumes = []
 fs = []
 sigmas = []
 labels = []
+gllen = []
+avg_drafts = []
 
 for k in slopes_by_shelf.keys():
-    if (k in rignot_shelf_massloss and ~np.isnan(rignot_shelf_massloss[k]) and ~np.isnan(slopes_by_shelf[k]))or k =="Amery" :
-        x,y = (polygons[k][0].centroid.x,polygons[k][0].centroid.y)
-        slopes.append(list([slopes_by_shelf[k]])*np.shape(hubheats_by_shelf[k])[1])
-        volumes.append(list([volumes_by_shelf[k]])*np.shape(hubheats_by_shelf[k])[1])
-        dump_volumes.append(list([np.sum(dump_volume_by_shelf[k])])*np.shape(hubheats_by_shelf[k])[1])
+    if (k in adusumilli_shelf_massloss and ~np.isnan(adusumilli_shelf_massloss[k]) and ~np.isnan(slopes_by_shelf[k]))or k =="Amery" :
         labels.append(k)
+        slopes.append(list([slopes_by_shelf[k]])*np.shape(hubheats_by_shelf[k])[1])
+        avg_drafts.append(list([drafts_by_shelf[k]])*np.shape(hubheats_by_shelf[k])[1])
         fs.append(list([np.nanmean(fs_by_shelf[k])])*np.shape(hubheats_by_shelf[k])[1])
         thermals.append(np.nanmean(hubheats_by_shelf[k],axis=0))
         cdws.append(np.nanmean(cdws_by_shelf[k],axis=0))
         gprimes.append(np.nanmean(gprimes_by_shelf[k],axis=0))
         hubshelf.append(np.nanmean(hubs_by_shelf[k]))
         gldepths.append(np.nanmean(depths_by_shelf[k]))
+        gllen.append(len(depths_by_shelf[k]))
         entrance_thickness.append(np.nanmean(np.abs(hubs_by_shelf[k]))- np.nanmean(np.abs(np.asarray(front_thick[k]))))
+        front_thicks.append(np.nanmean(np.abs(np.asarray(front_thick[k]))))
 
         front_depth[k] = np.asarray(front_depth[k])
-        front_thick[k] = np.asarray(front_thick[k])
         front_depth[k] = np.abs(front_depth[k][front_depth[k]>100])
 
+        # h_min.append(np.nanquantile(front_depth[k],0.25))
+        # h_max.append(np.nanquantile(front_depth[k],0.75))
         h_min.append(np.nanquantile(front_depth[k],0.25))
         h_max.append(np.nanquantile(front_depth[k],0.75))
 
@@ -277,7 +281,7 @@ for k in slopes_by_shelf.keys():
         else:
             sigmas.append(sigmas_by_shelf[k])
             areas.append(list([shelf_areas[k]])*np.shape(hubheats_by_shelf[k])[1])
-            mys.append(rignot_shelf_massloss[k])
+            mys.append(adusumilli_shelf_massloss[k])
 
  
 
@@ -288,8 +292,6 @@ areas = np.asarray(areas)[:,0]
 polynas = np.asarray(polynas)
 polynas_weighted = np.asarray(polynas_weighted)
 slopes = np.asarray(slopes)[:,0]
-volumes = np.asarray(volumes)[:,0]
-dump_volumes = np.asarray(dump_volumes)[:,0]
 gprimes = np.asarray(gprimes)[:,0]
 hubshelf = np.asarray(hubshelf)
 entrance_spread = np.asarray(entrance_spread)
@@ -297,8 +299,10 @@ h_min = np.asarray(h_min)
 h_max = np.asarray(h_max)
 salts = np.asarray(salts)
 gldepths = np.asarray(gldepths)
+avg_drafts = np.asarray(avg_drafts)[:,0]
 raw_temps = np.asarray(raw_temps)
 cdws = np.asarray(cdws)[:,0]
+
 print("-"*10)
 print("NEGATIVES",(cdws<0).sum())
 for i in range(len(cdws)):
@@ -320,11 +324,11 @@ meltflux = mys*(1/(60*60*24*365))*(920.0)
 
 #Btotal = ((-meltflux*area*dx*dy*34.5)-np.mean(polynaflux))/rho0*9.8*(7.8*10**(-4))
 
-Bmelt = 34.5*(1/(60*60*24*365))*(920.0)*(mys*areas*10**6)/1027*9.8*(gsw.beta(34.5,-1.8,gldepths/2))
-Bpolyna = 34.5*(1/(60*60*24*365))*(920.0)*(polynas)/1027*9.8*(gsw.beta(34.5,-1.9,0))
+Bmelt = 35*(1/(60*60*24*365))*(920.0)*(mys*areas*10**6)/1027*9.8*(gsw.beta(34.5,-1.8,gldepths/2))
+Bpolyna = 30*(1/(60*60*24*365))*(920.0)*(polynas)/1027*9.8*(gsw.beta(34.5,-1.9,0))
 
 
-Btotal = (Bmelt-Bpolyna)
+Btotal = -(Bmelt-Bpolyna)
 #heat from melt
 # B0 -= mys*(1/(60*60*24*365))*areas*(10**6)*920*330000*(1/2000)*(gsw.alpha(34.5,-1.8,gldepths))/1027*9.8
 # Bmelt = mys*(1/(60*60*24*365))*areas*(10**6)*920*330000*(1/2000)*(gsw.alpha(34.5,-1.8,gldepths))/1027*9.8
@@ -382,7 +386,6 @@ for i in range(len(labels)):
         shelf_classnumber_Btotal.append(-1)
     elif Btotal[i] > 0:
         shelf_classnumber_Btotal.append(1)
-print(shelf_classnumber_Btotal)
 #meanfris = np.mean(ratio[Ronnei] + ratio[Filchneri])
 #ratio[Ronnei]=0
 #ratio[Filchneri]=0
@@ -391,35 +394,37 @@ shelf_classnumber,shelf_color = read_shelf_class(labels)
 
 
 Bpolynahaid = 34.5*(1/(60*60*24*365))*(920.0)*(993*1000*1000*1000)/1027*9.8*(gsw.beta(34.5,-1.9,0))
-Bmelts = 34.5*(1/(60*60*24*365))*(920.0)*(mys*areas*10**6)/1027*9.8*(gsw.beta(34.5,-1.8,gldepths/2))
+Bmelts = 34.5*(1/(60*60*24*365))*(920.0)*(mys*areas*10**6)/1027*9.8*(gsw.beta(34.5,-1.8,avg_drafts))
 
-Btotal[ronnei] = Bmelts[filchneri] + Bmelt[ronnei] - (Bpolyna[ronnei] + Bpolyna[filchneri])*10
-areas[ronnei] = areas[ronnei] + areas[filchneri]
-sigmas[ronnei] = sigmas[ronnei] + sigmas[filchneri]
+# ronnei = labels.index("Ronne")
+# filchneri = labels.index("Filchner")
 
-
-ronnei = labels.index("Ronne")
-filchneri = labels.index("Filchner")
-Btotal = list(Btotal)
-areas = list(areas)
-sigmas = list(sigmas)
-labels[ronnei]="Filchner-Ronne (Haid et al. 2013)"
-del shelf_color[filchneri]
-del Btotal[filchneri]
-del shelf_classnumber[filchneri]
-del areas[filchneri]
-del sigmas[filchneri]
-del labels[filchneri]
-
-Btotal = np.asarray(Btotal)
-areas = np.asarray(areas)
-sigmas = np.asarray(sigmas)
+# Btotal[ronnei] = Bmelts[filchneri] + Bmelt[ronnei] - (Bpolyna[ronnei] + Bpolyna[filchneri])*10
+# areas[ronnei] = areas[ronnei] + areas[filchneri]
+# sigmas[ronnei] = sigmas[ronnei] + sigmas[filchneri]
 
 
-pf.shelf_class_fig(shelf_classnumber,labels,sigmas,areas,scalefactor,shelf_color,Btotal)
+# Btotal = list(Btotal)
+# areas = list(areas)
+# sigmas = list(sigmas)
+# labels[ronnei]="Filchner-Ronne (Haid et al. 2013)"
+# del shelf_color[filchneri]
+# del Btotal[filchneri]
+# del shelf_classnumber[filchneri]
+# del areas[filchneri]
+# del sigmas[filchneri]
+# del labels[filchneri]
+
+# Btotal = np.asarray(Btotal)
+# areas = np.asarray(areas)
+# sigmas = np.asarray(sigmas)
+
+
 #pf.param_vs_coldmelt_fig(cdws,salts,raw_temps,thermals,gprimes,slopes,volumes,fs,areas,gldepths,hubshelf,mys,sigmas,labels,polynas,polynas_weighted,shelf_classnumber)
 Bpolyna = -Bpolyna
+
 shelf_stats = {
+    #gl sorted
     "cdws":cdws,
     "salts":salts,
     "raw_temps":raw_temps,
@@ -427,25 +432,103 @@ shelf_stats = {
     "gprimes":gprimes,
     "h_min":h_min,
     "h_max":h_max,
-    "slopes":slopes,
-    "dump_volumes":dump_volumes,
     "fs-1":fs,
-    "areas":areas,
     "gldepths":gldepths,
     "entrance_thickness":entrance_thickness,
+    "front_thick":front_thicks,
+
+    #area sorted
+    "slopes":slopes,
     "mys":mys,
     "sigmas":sigmas,
-    "labels":labels,
-    "Btotal":Btotal,
+    "avg_drafts":avg_drafts,
+
+    # simple sum
+    "areas":areas*(10**6),
+    "gllen":gllen,
+    "Bmelt":Bmelt,
     "Bpolyna":Bpolyna,
-    "shelf_class":shelf_classnumber_Btotal,
+    "Btotal":Btotal,
+    "shelf_class":shelf_classnumber,
+    "shelf_color":shelf_color,
+
+    #no sum
+    "labels":labels,
 }
 
-pf.clean(shelf_stats,colorthresh=5,textthresh=5)
-# pf.clean_new(cdws,salts,raw_temps,thermals,gprimes,entrance_spread,h_min,h_max,slopes,dump_volumes,fs,areas,gldepths,entrance_thickness,mys,sigmas,labels,Bpolyna,polynas_weighted,shelf_classnumber_B0,colorthresh=5,textthresh=5)
-# pf.breakdown_cold(cdws,salts,raw_temps,thermals,gprimes,entrance_spread,h_min,h_max,slopes,dump_volumes,fs,areas,gldepths,entrance_thickness,mys,sigmas,labels,B0,polynas_weighted,shelf_classnumber_B0,colorthresh=5,textthresh=5)
 
-# pf.clean_optimal(cdws,salts,raw_temps,thermals,gprimes,entrance_spread,slopes,dump_volumes,fs,areas,gldepths,entrance_thickness,mys,sigmas,labels,polynas,polynas_weighted,shelf_classnumber_B0,colorthresh=5,textthresh=5)
+def shelf_merge(stats,s1,s2,snew):
+    stats["labels"] = list(stats["labels"])
+    s1 = stats["labels"].index(s1)
+    s2 = stats["labels"].index(s2)
+    if s2>s1:
+        s1, s2 = s2, s1
+
+    stats["labels"].append(snew)
+
+    s1area = stats["areas"][s1]
+    s2area = stats["areas"][s2]
+
+    s1gllen = stats["gllen"][s1]
+    s2gllen = stats["gllen"][s2]
+
+    for k in stats.keys():
+        if k != "labels":
+            stats[k] = list(stats[k])
+
+            if k in ['cdws','salts','raw_temps','Tcdw','gprimes',\
+                     'h_min','h_max','fs-1','gldepths','entrance_thickness','front_thick']:
+                stats[k].append((stats[k][s1]*s1gllen + stats[k][s2]*s2gllen)\
+                                /(s1gllen + s2gllen)) 
+
+            elif k in ['slopes','mys','sigmas','avg_drafts']:
+                stats[k].append((stats[k][s1]*s1area + stats[k][s2]*s2area)\
+                                /(s1area + s2area)) 
+
+            elif k in ['areas','Bmelt','Bpolyna',\
+                    'Btotal']:
+                stats[k].append(stats[k][s1] + stats[k][s2])
+
+            elif k == 'shelf_class':
+                print(stats[k][s1] , stats[k][s2])
+                print(stats["labels"][s1] , stats["labels"][s2])
+                stats[k].append(stats[k][s1] and stats[k][s2])
+
+            elif k == 'shelf_color':
+                stats[k].append(stats[k][s1])
+
+            stats[k].pop(s1)
+            stats[k].pop(s2)
+
+            stats[k] = np.asarray(stats[k])
+
+    stats["labels"].pop(s1)
+    stats["labels"].pop(s2)
+
+    stats["labels"] = np.asarray(stats["labels"])
+
+    return stats
+                
+
+shelf_stats = shelf_merge(shelf_stats,"Filchner","Ronne","FRIS")
+shelf_stats = shelf_merge(shelf_stats,"Ross_East","Ross_West","Ross")
+
+# pf.shelf_class_fig(shelf_stats,scalefactor)
+# plt.show()
+
+shelf_stats = pf.clean(shelf_stats,colorthresh=5,textthresh=5,mode="log")
+shelf_stats = pf.clean(shelf_stats,colorthresh=5,textthresh=5,mode="linear")
+# shelf_stats = pf.clean(shelf_stats,colorthresh=5,textthresh=5)
+
+pf.clean_optimal(shelf_stats)
+exit()
+
+
+
+# pf.clean_new(cdws,salts,raw_temps,thermals,gprimes,entrance_spread,h_min,h_max,slopes,dump_volumes,fs,areas,gldepths,entrance_thickness,mys,sigmas,labels,Bpolyna,polynas_weighted,shelf_classnumber_B0,colorthresh=5,textthresh=5)
+# pf.breakdown_cold(shelf_stats,colorthresh=5,textthresh=5)
+# exit()
+
 
 # pf.cleanlog(cdws,salts,raw_temps,thermals,gprimes,entrance_spread,h_min,h_max,slopes,dump_volumes,fs,areas,gldepths,entrance_thickness,mys,sigmas,labels,B0,polynas_weighted,shelf_classnumber_B0,colorthresh=5,textthresh=5)
 #pf.param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=30,ylim=30,textthresh=0,colorthresh=5,colorfield=list(np.log10(ratio)))

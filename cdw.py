@@ -431,6 +431,7 @@ def slope_by_shelf(bedmach,polygons,method = "simple"):
         largemask = label_im==labels[np.argmax(sizes)]
         largemask = be(largemask,iterations=2)
         clipped[~largemask] = np.nan
+        clipped[np.abs(clipped)<10] = np.nan
         if np.sum(~np.isnan(clipped))<100:
             slope_by_shelf[k]=np.nan
         else:
@@ -439,9 +440,10 @@ def slope_by_shelf(bedmach,polygons,method = "simple"):
                 # dx = np.diff(clipped,axis=0)[:,:-1]
                 # dy = np.diff(clipped,axis=1)[:-1,:]
                 dx, dy = np.gradient(clipped)
-                # if k in ["Shackleton","Cook"]:
+                if k in ["Baudouin"]:
                     # plt.imshow(np.sqrt((dx/500)**2 + (dy/500)**2))
-                    # plt.show()    
+                    plt.imshow(clipped)
+                    plt.show()    
                 slope_by_shelf[k] = np.nanmedian(np.sqrt((dx/500)**2 + (dy/500)**2))
             if method == "smoothed":
                 clippedmag = np.nanmax(np.abs(clipped))#*max(np.nanmax(X),np.nanmax(Y))
@@ -494,6 +496,47 @@ def slope_by_shelf(bedmach,polygons,method = "simple"):
     plt.show()
 
     return slope_by_shelf
+
+def draft_by_shelf(bedmach,polygons):
+    GLIBmach = bedmach.thickness.copy(deep=True)
+    GLIBmach.values[:] = bedmach.surface.values[:]-bedmach.thickness.values[:]
+    # GLIBmach.values[:] = gaussian_filter(bedmach.surface.values[:]-bedmach.thickness.values[:],2)
+    GLIBmach.values[np.logical_or(bedmach.icemask_grounded_and_shelves==0,np.isnan(bedmach.icemask_grounded_and_shelves))]=np.nan
+    GLIBmach = GLIBmach.rio.write_crs("epsg:3031")
+    # del GLIBmach.attrs['grid_mapping']
+    GLIBmach.rio.to_raster("data/glibmach.tif")
+    draft_by_shelf = {}
+    full_info = {}
+    for k in tqdm(polygons.keys()):
+        raster = riox.open_rasterio('data/glibmach.tif')
+        gons = []
+        parts = polygons[k][1]
+        polygon = polygons[k][0]
+        if len(parts)>1:
+            parts.append(-1)
+            for l in range(0,len(parts)-1):
+                poly_path=shapely.geometry.Polygon(np.asarray(polygon.exterior.coords.xy)[:,parts[l]:parts[l+1]].T)#.buffer(10**4)
+                gons.append(poly_path)
+        else:
+            gons = [polygon]
+
+        clipped = raster.rio.clip(gons)[0]
+        clipped = np.asarray(clipped)
+        clipped[clipped<-9000] = np.nan
+        #clipped = convolve2d(clipped, np.ones((10,10))/100)
+
+        label_im, nb_labels = label(~np.isnan(clipped))
+        sizes = ndimage.sum(~np.isnan(clipped), label_im, range(nb_labels + 1))
+        labels = np.asarray(range(nb_labels+1))
+        largemask = label_im==labels[np.argmax(sizes)]
+        largemask = be(largemask,iterations=2)
+        clipped[~largemask] = np.nan
+
+        draft_by_shelf[k] = np.nanmean(clipped)
+
+    return draft_by_shelf
+
+
 
 def extract_drafts(bedmach,polygons):
     GLIBmach = bedmach.thickness.copy(deep=True)
