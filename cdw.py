@@ -388,10 +388,10 @@ def parameterization_quantities(bedmap,grid,physical,baths,closest_hydro,sal,tem
                     si = np.interp(zi,d,np.asarray(s))
                     if np.isnan(t[11:]).all():
                         heats[timestep,l]=np.nan#
-                    elif np.nanmax(d[~np.isnan(t)])>abs(baths[l]):
+                    elif np.nanmax(d[~np.isnan(t)])>abs(baths[l]) and abs(baths[l])>100:
                         cdws[timestep,l]=pycnocline((ti,si),baths[l],shelf_key=shelves[l],lat=lat,lon=lon)
                         gprimes[timestep,l]=gprime((tinterp,sinterp),baths[l],shelf_key=shelves[l],lat=lat,lon=lon)
-                        raw,heat = heat_content((tinterp,sinterp),500,1000)
+                        raw,heat = heat_content((tinterp,sinterp),baths[l],50)
                         heats[timestep,l]=heat
                         raw_temp[timestep,l]=raw
                         salts[timestep,l]=salt_content((tinterp,sinterp),300,300)

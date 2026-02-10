@@ -157,9 +157,9 @@ with open("data/drafts_by_shelf.pickle","rb") as f:
     #pickle.dump((salts,raw_temps,hubheats,cdwdepths,gprimes),f)
 if createQuants:
     out = cdw.parameterization_quantities(bedmach,grid,physical,hubs,closest_hydro,sal,temp,shelf_keys,quant="hubheat",debug=False)
-    with open("data/new_stats_woa.pickle","wb") as f:
+    with open("data/verynew_stats_woa.pickle","wb") as f:
         pickle.dump(out,f)
-with open("data/new_stats_woa.pickle","rb") as f:
+with open("data/verynew_stats_woa.pickle","rb") as f:
     (salts,raw_temps,hubheats,cdwdepths,gprimes) = pickle.load(f)
     
 
@@ -195,7 +195,6 @@ with open("data/polyna_by_shelf_2024_ds2.pickle","rb") as f:
 
 polyna_by_shelf = {}
 for k in polyna_by_shelf_ds1.keys():
-    print(polyna_by_shelf_ds1[k] , polyna_by_shelf_ds2[k])
     polyna_by_shelf[k] = (polyna_by_shelf_ds1[k] + polyna_by_shelf_ds2[k])/2.0
 polyna_by_shelf = polyna_by_shelf_ds2
 
@@ -490,8 +489,6 @@ def shelf_merge(stats,s1,s2,snew):
                 stats[k].append(stats[k][s1] + stats[k][s2])
 
             elif k == 'shelf_class':
-                print(stats[k][s1] , stats[k][s2])
-                print(stats["labels"][s1] , stats["labels"][s2])
                 stats[k].append(stats[k][s1] and stats[k][s2])
 
             elif k == 'shelf_color':
@@ -515,18 +512,19 @@ shelf_stats = shelf_merge(shelf_stats,"Ross_East","Ross_West","Ross")
 
 # pf.shelf_class_fig(shelf_stats,scalefactor)
 # plt.show()
+# plt.show()
 
-shelf_stats = pf.clean(shelf_stats,colorthresh=5,textthresh=5,mode="log")
 shelf_stats = pf.clean(shelf_stats,colorthresh=5,textthresh=5,mode="linear")
+shelf_stats = pf.clean(shelf_stats,colorthresh=5,textthresh=5,mode="log")
 # shelf_stats = pf.clean(shelf_stats,colorthresh=5,textthresh=5)
 
-pf.clean_optimal(shelf_stats)
-exit()
+# pf.clean_optimal(shelf_stats)
+# exit()
+# pf.breakdown(shelf_stats,colorthresh=5,textthresh=5)
 
 
 
 # pf.clean_new(cdws,salts,raw_temps,thermals,gprimes,entrance_spread,h_min,h_max,slopes,dump_volumes,fs,areas,gldepths,entrance_thickness,mys,sigmas,labels,Bpolyna,polynas_weighted,shelf_classnumber_B0,colorthresh=5,textthresh=5)
-# pf.breakdown_cold(shelf_stats,colorthresh=5,textthresh=5)
 # exit()
 
 
