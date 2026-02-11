@@ -25,6 +25,8 @@ import rioxarray as riox
 import rasterio
 import ipdb
 from scipy.interpolate import SmoothBivariateSpline as sbs
+from astropy.convolution import convolve, Box2DKernel
+
 
 
 def moving_average(x, w):
@@ -391,7 +393,7 @@ def parameterization_quantities(bedmap,grid,physical,baths,closest_hydro,sal,tem
                     elif np.nanmax(d[~np.isnan(t)])>abs(baths[l]) and abs(baths[l])>100:
                         cdws[timestep,l]=pycnocline((ti,si),baths[l],shelf_key=shelves[l],lat=lat,lon=lon)
                         gprimes[timestep,l]=gprime((tinterp,sinterp),baths[l],shelf_key=shelves[l],lat=lat,lon=lon)
-                        raw,heat = heat_content((tinterp,sinterp),baths[l],50)
+                        raw,heat = heat_content((tinterp,sinterp),baths[l],cdws[timestep,l])
                         heats[timestep,l]=heat
                         raw_temp[timestep,l]=raw
                         salts[timestep,l]=salt_content((tinterp,sinterp),300,300)
@@ -439,7 +441,10 @@ def slope_by_shelf(bedmach,polygons,method = "simple"):
             if method == "simple":
                 # dx = np.diff(clipped,axis=0)[:,:-1]
                 # dy = np.diff(clipped,axis=1)[:-1,:]
+                box_kernel = Box2DKernel(5)
+                clipped = convolve(clipped, box_kernel,preserve_nan=True)
                 dx, dy = np.gradient(clipped)
+
                 if k in ["Baudouin"]:
                     # plt.imshow(np.sqrt((dx/500)**2 + (dy/500)**2))
                     plt.imshow(clipped)

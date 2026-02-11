@@ -25,6 +25,8 @@ import ipdb
 import random
 from sympy import Symbol
 from sympy import solve,nsolve,re
+from matplotlib.patches import Rectangle
+
 
 def grab_bottom(t,max_depth=500):
     tvalues = t.t_an.values
@@ -689,54 +691,52 @@ def clean(s,colorthresh=5,textthresh=5,mode="linear"):
     Bthresh = 50
     # s['Btotal'][s['Btotal']>0] = 0
     # areas = np.asarray(areas)
-    wmask = np.asarray((-s["Btotal"]))>Bthresh#0.0005
-    warm_mys=np.asarray(s['mys']*s['areas'])[wmask]
-    warmfull = np.asarray(np.asarray(s['cdws'])*np.asarray(s['Tcdw'])*np.asarray(s['gprimes'])*np.asarray(s['slopes'])*np.asarray(s['fs-1']))*np.asarray(s['areas'])
-
-    cmask = np.asarray(-s["Btotal"])<-Bthresh#0.0005
-    cold_mys=np.asarray(s['mys']*s['areas'])[cmask]
  
     coldfull = np.full_like(s['slopes'],np.nan)
-    for i in range(len(s['salts'])):
-        if cmask[i] or True:
-            ## Let us walk through this because it requires some precisionn
-            #x is the area average melt rate in m/yr
-            x = Symbol('x',real=True,positive=True)
+    for i in tqdm(range(len(s['salts']))):
+        ## Let us walk through this because it requires some precisionn
+        #x is the area average melt rate in m/yr
+        x = Symbol('x',real=True,positive=True)
 
-            # we convert the melt rate to a buoyancy (note the conversion to m/s of melt)
-            meltflux = x*(1/(60*60*24*365))*(920.0)
-            # Bpolyna is negative!
-            Btotal = ((meltflux*s['areas'][i]*34.5))/rho0*9.8*gsw.beta(34.5,-1.9,np.abs(s['avg_drafts'][i]))+s['Bpolyna'][i]
-
-            meltscalefactor = ((s['areas'][i]*34.5))/rho0*9.8*gsw.beta(34.5,-1.9,np.abs(s['avg_drafts'][i]))
-
-            ## The equations are in the SI but this solves for g'_dc
-            rhomin,rhomax = (rho0/9.8)*((1/s['fs-1'][i])*(-Btotal))**(1/2)/(s['h_max'][i]),\
-                (rho0/9.8)*((1/s['fs-1'][i])*(-Btotal))**(1/2)/(s['h_min'][i])
-            rhomean = (rho0/9.8)*((1/s['fs-1'][i])*(-Btotal))**(1/2)/(np.nanmean((s['h_max'][i]+s['h_min'][i])/2))
-            stratterm = rhomax-rhomin
-
-            rho_s = gsw.beta(34.5,-1.9,500)*rho0
-            Spolyna = 34.5 + rhomean/rho_s
-            # if np.isnan(stratterm):
-            #     stratterm = 0
-            #     Spolyna = 34.5
+        # we convert the melt rate to a buoyancy (note the conversion to m/s of melt)
+        meltflux = (x/(60*60*24*365))*(920.0)
+        # Bpolyna is negative!
+        Btotal = ((meltflux*s['areas'][i]*34.5))/rho0*9.8*gsw.beta(34.5,-1.9,np.abs(s['avg_drafts'][i]))+s['Bpolyna'][i]
 
 
-            Tf = gsw.CT_freezing(34.5,200,0)
-            Tpolyna = gsw.CT_freezing(34.5,0,0)#-1.9
-            D = (1-(Cp/If)*(Tf-(Tpolyna))/4)
-            gprimes_cold = (9.8/1027)*(Spolyna*(1-1/D)*rho_s + (stratterm/6))
+        ## The equations are in the SI but this solves for g'_dc
+        rhomin,rhomax = (rho0/9.8)*((1/s['fs-1'][i])*(-Btotal))**(1/2)/(s['h_max'][i]),\
+            (rho0/9.8)*((1/s['fs-1'][i])*(-Btotal))**(1/2)/(s['h_min'][i])
+        rhomean = (rho0/9.8)*((1/s['fs-1'][i])*(-Btotal))**(1/2)/(np.nanmean((s['h_max'][i]+s['h_min'][i])/2))
+        stratterm = rhomax-rhomin
 
-            Tfnew = gsw.CT_freezing(34.5,s['front_thick'][i],0)
+        rho_s = gsw.beta(34.5,-1.9,0)*rho0
+        Spolyna = 34.5 + rhomean/rho_s
 
-            C = (0.007*(rho0*Cp)/(rhoi*If*W0))
+        Tf = gsw.CT_freezing(34.5,200,0)
+        Tpolyna = gsw.CT_freezing(34.5,0,0)#-1.9
+        D = (1-(Cp/If)*(Tf-(Tpolyna))/4)
+        gprimes_cold = (9.8/1027)*(Spolyna*(1-1/D)*rho_s + (stratterm/6))
 
+        Tfnew = gsw.CT_freezing(34.5,s['front_thick'][i],0)
+
+        # C = (0.009*(rho0*Cp)/(rhoi*If*W0))
+        candidate_alpha = 0.02
+        C = (candidate_alpha*(rho0*Cp)/(rhoi*If*W0))
+
+        try:
             solveexpr = x - (C*(60*60*24*365))*s['slopes'][i]*s['entrance_thickness'][i]*s['fs-1'][i]*(Tpolyna-Tfnew)*gprimes_cold
-
-            coldfull[i] = float(re(nsolve(solveexpr,x,1)))*s['areas'][i]
+            coldfull[i] = float(re(nsolve(solveexpr,x,0)))*s['areas'][i]/candidate_alpha
+        except:
+            coldfull[i] = np.nan
+            
+    cmask = np.asarray(-s["Btotal"])<-Bthresh#0.0005
+    cold_mys=np.asarray(s['mys']*s['areas'])[cmask]
+            
         
-
+    wmask = np.logical_or(np.asarray((-s["Btotal"]))>Bthresh,np.isnan(coldfull))#0.0005
+    warm_mys=np.asarray(s['mys']*s['areas'])[wmask]
+    warmfull = np.asarray(np.asarray(s['cdws'])*np.asarray(s['Tcdw'])*np.asarray(s['gprimes'])*np.asarray(s['slopes'])*np.asarray(s['fs-1']))*np.asarray(s['areas'])*((rho0*Cp)/(rhoi*If*W0))
 
     rhoi = 910
     gigatonconv = 10**(-12)
@@ -750,30 +750,29 @@ def clean(s,colorthresh=5,textthresh=5,mode="linear"):
         warm_mys = np.log10(warm_mys*scalefactor)
         cold_mys = np.log10(cold_mys*scalefactor)
 
-    warm = warmfull[wmask]
+    warm = warmfull[wmask]/s['areas'][wmask]
     warm_xs = np.asarray(([warm])).reshape((-1, 1))
-    warm_model = LinearRegression(fit_intercept=False).fit(warm_xs, warm_mys)
-    warm_melts = warm_model.predict(warm_xs)
+    warm_model = LinearRegression(fit_intercept=False).fit(warm_xs, warm_mys/s['areas'][wmask])
+    warm_melts = warm_model.predict(warm_xs)*s['areas'][wmask]
 
     # coldfull = s['slopes']*(np.abs(s['entrance_thickness']))*np.asarray(s['fs-1'])*np.asarray(s['areas'])*gprimes_cold*glfreezing#*gprimechapman#*glfreezing#*gprimechapman
-    cold = coldfull[cmask]
+    cold = coldfull[cmask]/s['areas'][cmask]
     cold_xs = np.asarray(([cold])).reshape((-1, 1))
-    cold_model = LinearRegression(fit_intercept=False).fit(cold_xs, cold_mys)
-    cold_melts = cold_model.predict(cold_xs)
+    cold_model = LinearRegression(fit_intercept=False).fit(cold_xs, cold_mys/s['areas'][cmask])
+    cold_melts = cold_model.predict(cold_xs)*s['areas'][cmask]
 
-    alpha_connected =  ((warm_model.coef_/((rho0*Cp)/(rhoi*If*W0)))/(364*24*60*60))[0]
-    alpha_disconnected =  ((cold_model.coef_/((rho0*Cp)/(rhoi*If*W0)))/(364*24*60*60))[0]
+    alpha_connected =  ((warm_model.coef_)/(364*24*60*60))[0]
+    alpha_disconnected =  ((cold_model.coef_))[0]
 
-    cold_model_a = LinearRegression(fit_intercept=False).fit(cold_xs/s['areas'][cmask], cold_mys/s['areas'][cmask])
-    print("area average alpha : ",((cold_model_a.coef_/((rho0*Cp)/(rhoi*If*W0)))/(364*24*60*60))[0])
+    print('alpha_connected: ',alpha_connected)
+    print('alpha_disconnected: ',alpha_disconnected)
 
 
-
-    graymask = np.abs(s["Btotal"])<=Bthresh #0.0005
-    graycold_xs = np.asarray(([coldfull[graymask]])).reshape((-1,1))
-    graywarm_xs = np.asarray(([warmfull[graymask]])).reshape((-1,1))
+    graymask = np.logical_and(np.abs(s["Btotal"])<=Bthresh,~np.isnan(coldfull)) #0.0005
+    graycold_xs = np.asarray(([coldfull[graymask]/s['areas'][graymask]])).reshape((-1,1))
+    graywarm_xs = np.asarray(([warmfull[graymask]/s['areas'][graymask]])).reshape((-1,1))
     if len(graycold_xs)>0:
-        gray_melts = (cold_model.predict(graycold_xs) + warm_model.predict(graywarm_xs))/2.0
+        gray_melts =s['areas'][graymask]*(cold_model.predict(graycold_xs) + warm_model.predict(graywarm_xs))/2.0
     else:
         gray_melts = np.asarray([])
     
@@ -789,7 +788,7 @@ def clean(s,colorthresh=5,textthresh=5,mode="linear"):
 
     ipdb.set_trace()
     if mode == "linear":
-        axin1 = ax.inset_axes([80, 5, 55, 60], transform=ax.transData,xticklabels=[], yticklabels=[])
+        axin1 = ax.inset_axes([5, 80, 50, 55], transform=ax.transData,xticklabels=[], yticklabels=[])
         ax.indicate_inset_zoom(axin1, edgecolor="black")
         ax.scatter(warm_melts.flatten()*scalefactor,scalefactor*warm_mys,c="orange")
         ax.scatter(cold_melts.flatten()*scalefactor,scalefactor*cold_mys,c="purple")
@@ -854,9 +853,10 @@ def clean(s,colorthresh=5,textthresh=5,mode="linear"):
 
 
 
-    ax.text(.05, .95, '$r^2=$'+str(round(r2,2)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
-    ax.text(.05, .92, r'$\alpha_\mathrm{disconnected}=$'+str(round(alpha_disconnected,5)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
-    ax.text(.05, .89, r'$\alpha_\mathrm{connected}=$'+str(round(alpha_connected,5)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
+    ax.text(110, 30, '$r^2=$'+str(round(r2,2)), ha='left', va='top', transform=plt.gca().transData,fontsize=12)
+    ax.text(110, 25, r'$\alpha_\mathrm{disconnected}=$'+str(round(alpha_disconnected,5)), ha='left', va='top', transform=plt.gca().transData,fontsize=12)
+    ax.text(110, 20, r'$\alpha_\mathrm{connected}=$'+str(round(alpha_connected,5)), ha='left', va='top', transform=plt.gca().transData,fontsize=12)
+
 
     ax.set_xlabel(r"$\dot{M}_{\mathrm{pred}} (Gt/yr)$",fontsize=24)
     ax.set_ylabel(r'$\dot{M}_{\mathrm{obs}} (Gt/yr)$',fontsize=24)

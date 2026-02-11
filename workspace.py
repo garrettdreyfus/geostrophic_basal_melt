@@ -157,9 +157,9 @@ with open("data/drafts_by_shelf.pickle","rb") as f:
     #pickle.dump((salts,raw_temps,hubheats,cdwdepths,gprimes),f)
 if createQuants:
     out = cdw.parameterization_quantities(bedmach,grid,physical,hubs,closest_hydro,sal,temp,shelf_keys,quant="hubheat",debug=False)
-    with open("data/verynew_stats_woa.pickle","wb") as f:
+    with open("data/new_stats_woa.pickle","wb") as f:
         pickle.dump(out,f)
-with open("data/verynew_stats_woa.pickle","rb") as f:
+with open("data/new_stats_woa.pickle","rb") as f:
     (salts,raw_temps,hubheats,cdwdepths,gprimes) = pickle.load(f)
     
 
