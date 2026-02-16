@@ -515,10 +515,10 @@ shelf_stats = shelf_merge(shelf_stats,"Ross_East","Ross_West","Ross")
 # plt.show()
 
 shelf_stats = pf.clean(shelf_stats,colorthresh=5,textthresh=5,mode="linear")
-shelf_stats = pf.clean(shelf_stats,colorthresh=5,textthresh=5,mode="log")
-# shelf_stats = pf.clean(shelf_stats,colorthresh=5,textthresh=5)
+# shelf_stats = pf.clean(shelf_stats,colorthresh=5,textthresh=5,mode="log")
+# shelf_stats = pf.clean(shelf_stats,colorthresh=5,textthresh=5,mode="log")
 
-# pf.clean_optimal(shelf_stats)
+pf.clean_optimal(shelf_stats)
 # exit()
 # pf.breakdown(shelf_stats,colorthresh=5,textthresh=5)
 
