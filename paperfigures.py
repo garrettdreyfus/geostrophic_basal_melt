@@ -89,12 +89,11 @@ def shelf_class_fig(stats,scalefactor):
     plt.xticks(fontsize=14,rotation=0)
     plt.yticks(fontsize=14,rotation=0)
     plt.savefig("/home/garrett/Downloads/b0class.svg")
-    ipdb.set_trace()
 
 
 
 
-def clean(s,colorthresh=5,textthresh=5,mode="linear"):
+def evaluate_theory(s,colorthresh=5,textthresh=5,mode="linear"):
     rho0 = 1025
     rhoi = 910
     Cp = 4186
@@ -117,10 +116,9 @@ def clean(s,colorthresh=5,textthresh=5,mode="linear"):
 
 
         ## The equations are in the SI but this solves for g'_dc
-        rhomin,rhomax = (rho0/9.8)*((1/s['fs-1'][i])*(-Btotal))**(1/2)/(s['h_max'][i]),\
-            (rho0/9.8)*((1/s['fs-1'][i])*(-Btotal))**(1/2)/(s['h_min'][i])
-        rhomean = (rho0/9.8)*((1/s['fs-1'][i])*(-Btotal))**(1/2)/(np.nanmean((s['h_max'][i]+s['h_min'][i])/2))
-        stratterm = rhomax-rhomin
+        rhomean = (rho0/9.8)*((1/s['fs-1'][i])*(-Btotal))**(1/2)/(np.nanmean(s['front_depth'][i]))
+        # stratterm = rhomax-rhomin
+        stratterm = rhomean
 
         rho_s = gsw.beta(34.5,-1.9,0)*rho0
         Spolyna = 34.5 + rhomean/rho_s
@@ -161,7 +159,6 @@ def clean(s,colorthresh=5,textthresh=5,mode="linear"):
         warmfull = np.log10(warmfull*scalefactor)
         warm_mys = np.log10(warm_mys*scalefactor)
         cold_mys = np.log10(cold_mys*scalefactor)
-    ipdb.set_trace()
 
     warm = warmfull[wmask]
     warm_xs = np.asarray(([warm])).reshape((-1, 1))
@@ -199,9 +196,9 @@ def clean(s,colorthresh=5,textthresh=5,mode="linear"):
     r2 = pearsonr(np.concatenate((cold_melts.flatten(),warm_melts.flatten(),gray_melts.flatten())),np.concatenate((cold_mys.flatten(),warm_mys.flatten(),gray_mys.flatten()))).statistic**2
     fig, ax = plt.subplots(1,1)
 
-    ipdb.set_trace()
     if mode == "linear":
-        axin1 = ax.inset_axes([5, 80, 50, 55], transform=ax.transData,xticklabels=[], yticklabels=[])
+        axin1 = ax.inset_axes([5, 80, 50, 55], transform=ax.transData)
+        axin1.tick_params(axis='both', labelsize=12)
         ax.indicate_inset_zoom(axin1, edgecolor="black")
         ax.scatter(warm_melts.flatten()*scalefactor,scalefactor*warm_mys,c="orange")
         ax.scatter(cold_melts.flatten()*scalefactor,scalefactor*cold_mys,c="purple")
@@ -271,6 +268,7 @@ def clean(s,colorthresh=5,textthresh=5,mode="linear"):
     ax.text(110, 20, r'$\alpha_\mathrm{connected}=$'+str(round(alpha_connected,5)), ha='left', va='top', transform=plt.gca().transData,fontsize=12)
 
 
+    ax.tick_params(axis='both', labelsize=18)
     ax.set_xlabel(r"$\dot{M}_{\mathrm{pred}} (Gt/yr)$",fontsize=24)
     ax.set_ylabel(r'$\dot{M}_{\mathrm{obs}} (Gt/yr)$',fontsize=24)
 
@@ -294,7 +292,7 @@ def clean(s,colorthresh=5,textthresh=5,mode="linear"):
     s['connected_estimate'] = warmfull
     return s
 
-def clean_optimal(s):
+def optimal_classification(s):
 
     # areas = np.asarray(areas)
 
@@ -338,6 +336,8 @@ def clean_optimal(s):
 
     plt.hist(r2s,bins=50,color="black",alpha=0.75)
 
+    plt.xticks(fontsize=16,rotation=0)
+    plt.yticks(fontsize=16,rotation=0)
     plt.xlabel(r"$r^2$",fontsize=18)
     plt.ylabel('# of classification combinations',fontsize=18)
 

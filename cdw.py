@@ -87,14 +87,6 @@ def pycnocline(heat_function,hub,shelf_key=None,lat=None,lon=None,debug=False):
     deltaH = -(zpyc)+(hub)
 
     if debug and shelf_key=="Wilkins":
-        # fig,(ax1,ax2) = plt.subplots(1,2)
-        # ax1.plot(ti,-zi)
-        # ax2.plot(ti,-zi)
-        # ax1.axhline(y=-hub,color="blue",label="HUB")
-        # ax1.legend()
-        # plt.title(str(round(lat,1))+" , "+str(round(lon,1)))
-        # plt.show()
-
         fig,(ax1,ax2) = plt.subplots(1,2)
         ax1.plot(gsw.rho(si,ti,100),-zi)
         ax1.axhline(y=-zpyc,color="red",label="Pycnocline")
@@ -471,8 +463,7 @@ def slope_by_shelf(bedmach,polygons,method = "simple"):
                     ax2.imshow(out)
                     plt.title(k)
                     plt.show()    
-                slope_by_shelf[k] = np.nanmean(out*clippedmag)#np.nanmean(np.sqrt((dx/500)**2 + (dy/500)**2))
-                # slope_by_shelf[k] = np.nanmean(np.sqrt((dx/500)**2 + (dy/500)**2))
+                slope_by_shelf[k] = np.nanmean(out*clippedmag)
             if method == "plane":
                 flatclipped=clipped[~np.isnan(clipped)]
                 scalefactor = np.max(np.abs(flatclipped))#*max(np.nanmax(X),np.nanmax(Y))
@@ -482,7 +473,6 @@ def slope_by_shelf(bedmach,polygons,method = "simple"):
                 m2=np.abs(m2)
 
                 if k in ["Pine_Island"] or False:
-                    #plt.imshow(np.sqrt((dx/500)**2 + (dy/500)**2))
                     print(k)
                     plt.pcolormesh(X*500,Y*500,clipped)
                     plt.colorbar()
@@ -493,9 +483,6 @@ def slope_by_shelf(bedmach,polygons,method = "simple"):
                 dx = np.gradient(clipped,500,axis=1)[:,:-1]
                 dy = np.gradient(clipped,500,axis=0)[:-1,:]
                 ipdb.set_trace()
-            # if np.sum(~np.isnan(clipped))>7500:
-            # else:
-            #     clipped[~np.isnan(clipped)] = sbs(X,Y,clipped[~np.isnan(clipped)]/clippedmag,kx=3,ky=3)(X,Y,grid=False)*clippedmag
 
 
     plt.show()
