@@ -100,8 +100,6 @@ def evaluate_theory(s,colorthresh=5,textthresh=5,mode="linear"):
     If = 334000
     W0 =  100000
     Bthresh = 50
-    # s['Btotal'][s['Btotal']>0] = 0
-    # areas = np.asarray(areas)
  
     coldfull = np.full_like(s['slopes'],np.nan)
     for i in tqdm(range(len(s['salts']))):
@@ -130,7 +128,6 @@ def evaluate_theory(s,colorthresh=5,textthresh=5,mode="linear"):
 
         Tfnew = gsw.CT_freezing(34.5,s['front_thick'][i],0)
 
-        # C = (0.009*(rho0*Cp)/(rhoi*If*W0))
         candidate_alpha = 0.02
         C = (candidate_alpha*(rho0*Cp)/(rhoi*If*W0))
 
@@ -152,7 +149,6 @@ def evaluate_theory(s,colorthresh=5,textthresh=5,mode="linear"):
     gigatonconv = 10**(-12)
     scalefactor = rhoi*gigatonconv
 
-    ##########3
     if mode == "log":
         print(coldfull)
         coldfull = np.log10(coldfull*scalefactor)
@@ -165,7 +161,6 @@ def evaluate_theory(s,colorthresh=5,textthresh=5,mode="linear"):
     warm_model = LinearRegression(fit_intercept=False).fit(warm_xs, warm_mys)
     warm_melts = warm_model.predict(warm_xs)
 
-    # coldfull = s['slopes']*(np.abs(s['entrance_thickness']))*np.asarray(s['fs-1'])*np.asarray(s['areas'])*gprimes_cold*glfreezing#*gprimechapman#*glfreezing#*gprimechapman
     cold = coldfull[cmask]
     cold_xs = np.asarray(([cold])).reshape((-1, 1))
     cold_model = LinearRegression(fit_intercept=False).fit(cold_xs, cold_mys)
@@ -294,7 +289,6 @@ def evaluate_theory(s,colorthresh=5,textthresh=5,mode="linear"):
 
 def optimal_classification(s):
 
-    # areas = np.asarray(areas)
 
     maxr = 0
     max_shelf_class = []
