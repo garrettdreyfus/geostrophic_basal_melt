@@ -8,7 +8,6 @@ import matplotlib
 from matplotlib import gridspec
 import matplotlib as mpl
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-from adjustText import adjust_text
 from tqdm import tqdm
 import pickle
 import rioxarray as riox
@@ -499,7 +498,6 @@ def param_vs_melt_fig(cdws,thermals,gprimes,slopes,fs,mys,sigmas,labels,xlim=30,
         if melts[k]>textthresh:
             text=plt.annotate(labels[k],(melts[k],mys[k]))
             texts.append(text)
-    #adjust_text(texts)
     ax.plot(range(30),range(30))
     ax.text(.05, .95, '$r^2=$'+str(round(r2,2)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
     ax.set_xlabel(r"$\dot{m}_{\mathrm{pred}} (m/yr)$",fontsize=24)
@@ -566,7 +564,6 @@ def singleparam_vs_melt_fig(quant,mys,sigmas,labels,xlabel):
     for k in range(len(labels)):
         text=plt.annotate(labels[k],(quant[k],mys[k]))
         texts.append(text)
-    #adjust_text(texts)
     ax.text(.05, .95, '$r^2=$'+str(round(r2,2)), ha='left', va='top', transform=plt.gca().transAxes,fontsize=12)
     ax.set_xlabel(xlabel,fontsize=24)
     ax.set_ylabel(r'$\dot{m}_{\mathrm{obs}} (m/yr)$',fontsize=24)
